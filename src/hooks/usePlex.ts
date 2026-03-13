@@ -84,13 +84,18 @@ export function usePlex(): UsePlexReturn {
       const text = await res.text()
       let data: any
       try { data = JSON.parse(text) } catch { return }
-      setSections(
-        (data?.MediaContainer?.Directory ?? []).map((d: any) => ({
-          type: d.type,
-          title: d.title,
-          count: parseInt(d.count ?? d.totalSize ?? '0'),
-        }))
-      )
+      const dirs: any[] = data?.MediaContainer?.Directory ?? []
+      const sections = await Promise.all(dirs.map(async (d) => {
+        try {
+          const r = await proxyFetch(plexUrl(`/library/sections/${d.key}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0`))
+          const t = await r.text()
+          const j = JSON.parse(t)
+          return { type: d.type, title: d.title, count: j?.MediaContainer?.totalSize ?? 0 }
+        } catch {
+          return { type: d.type, title: d.title, count: 0 }
+        }
+      }))
+      setSections(sections)
     } catch { /* non-critical */ }
   }, [])
 
