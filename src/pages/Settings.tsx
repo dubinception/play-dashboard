@@ -53,7 +53,21 @@ const inputStyle: React.CSSProperties = {
 }
 
 export default function Settings() {
-  const { getService, setField, isConfigured, cloudflare, setCloudflareField } = useConfigStore()
+  const { getService, setField, isConfigured, cloudflare, setCloudflareField, loadFromKV, saveToKV, syncStatus, syncError, lastSynced } = useConfigStore()
+
+  const syncLabel = {
+    idle:    'Cloud Sync',
+    loading: 'Loading…',
+    saving:  'Saving…',
+    success: 'Synced',
+    error:   'Error',
+  }[syncStatus]
+
+  const syncColor = syncStatus === 'success'
+    ? 'var(--accent-2)'
+    : syncStatus === 'error'
+      ? '#f87171'
+      : 'var(--text-muted)'
 
   return (
     <div style={{ padding: '24px', maxWidth: '800px' }}>
@@ -62,10 +76,69 @@ export default function Settings() {
           Settings
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '28px' }}>
-          Configure your service connections. Keys are saved locally in your browser.
+          Configure your service connections. Save to cloud to sync across browsers.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+          {/* Cloud Sync */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: `1px solid ${syncStatus === 'error' ? 'rgba(248,113,113,0.3)' : syncStatus === 'success' ? 'rgba(0,229,160,0.25)' : 'var(--border)'}`,
+            borderRadius: '12px',
+            padding: '16px 20px',
+            transition: 'border-color 300ms ease',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <span style={{ fontSize: '1.1rem' }}>☁️</span>
+              <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Cloud Sync</span>
+              <span style={{
+                marginLeft: 'auto', fontSize: '0.7rem', padding: '2px 10px',
+                borderRadius: '10px',
+                border: `1px solid ${syncStatus === 'error' ? 'rgba(248,113,113,0.4)' : syncStatus === 'success' ? 'rgba(0,229,160,0.4)' : 'var(--border)'}`,
+                color: syncColor,
+                background: syncStatus === 'success' ? 'rgba(0,229,160,0.08)' : syncStatus === 'error' ? 'rgba(248,113,113,0.08)' : 'transparent',
+                transition: 'all 300ms ease',
+              }}>
+                {syncLabel}
+              </span>
+            </div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+              Sync your config to Cloudflare KV so it loads on any browser.
+              {lastSynced && (
+                <span> Last synced: {new Date(lastSynced).toLocaleTimeString()}.</span>
+              )}
+            </p>
+            {syncError && (
+              <p style={{ fontSize: '0.75rem', color: '#f87171', marginBottom: '10px' }}>{syncError}</p>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => loadFromKV()}
+                disabled={syncStatus === 'loading' || syncStatus === 'saving'}
+                style={{
+                  padding: '7px 16px', borderRadius: '8px', fontSize: '0.8rem', fontFamily: 'inherit',
+                  border: '1px solid var(--border)', background: 'var(--bg-base)',
+                  color: 'var(--text-primary)', cursor: 'pointer', transition: 'opacity 200ms',
+                  opacity: (syncStatus === 'loading' || syncStatus === 'saving') ? 0.5 : 1,
+                }}
+              >
+                Load from Cloud
+              </button>
+              <button
+                onClick={() => saveToKV()}
+                disabled={syncStatus === 'loading' || syncStatus === 'saving'}
+                style={{
+                  padding: '7px 16px', borderRadius: '8px', fontSize: '0.8rem', fontFamily: 'inherit',
+                  border: '1px solid rgba(0,229,160,0.4)', background: 'rgba(0,229,160,0.08)',
+                  color: 'var(--accent-2)', cursor: 'pointer', transition: 'opacity 200ms',
+                  opacity: (syncStatus === 'loading' || syncStatus === 'saving') ? 0.5 : 1,
+                }}
+              >
+                Save to Cloud
+              </button>
+            </div>
+          </div>
 
           {/* Cloudflare Access */}
           <div style={{
@@ -161,7 +234,7 @@ export default function Settings() {
         </div>
 
         <p style={{ marginTop: '20px', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          Settings are auto-saved to your browser. Cloudflare KV sync coming in a later phase.
+          Settings are saved locally in your browser. Use Cloud Sync to share across browsers.
         </p>
       </motion.div>
     </div>
