@@ -18,6 +18,7 @@ export default function App() {
       <div className="glow-bottom" />
       <div className="glow-teal" />
       <div className="glow-topleft" />
+      <div className="glow-topright" />
       <div className="dot-grid" />
 
       <Sidebar />
