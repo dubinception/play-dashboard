@@ -1,5 +1,5 @@
-# Play Dashboard — play.cronus.nexus
-### Planning Document · Last updated: 2026-03-12
+# CRONUS Dashboard — play.cronus.nexus
+### Planning Document · Last updated: 2026-03-13
 
 ---
 
@@ -13,284 +13,202 @@ A self-hosted media server command center that replaces juggling between Plex, O
 
 ## Tech Stack
 
-| Layer | Choice | Reason |
+| Layer | Choice | Notes |
 |---|---|---|
-| Framework | React + TypeScript + Vite | Consistent with work dashboard, great ecosystem |
-| Hosting | Cloudflare Pages | Free tier, global CDN, easy GitHub deploy |
-| API Proxy | Cloudflare Pages Functions | CORS bypass for self-hosted services, keeps keys server-side |
-| Tunnels | Cloudflare Tunnels | All self-hosted services already behind tunnels |
-| Auth | Google OAuth 2.0 | Single user / household, already familiar |
-| Tile Layout | react-grid-layout | Drag, drop, resize, snap-to-grid, save layout |
-| Styling | Tailwind CSS + custom CSS | Same pattern as work dashboard |
-| Animations | Framer Motion | Page transitions, tile animations |
-| Charts | Recharts | Tautulli stats, download speeds, disk usage |
-| Config storage | Cloudflare KV + localStorage | API keys in KV secrets, layout prefs in localStorage |
+| Framework | React + TypeScript + Vite | |
+| Hosting | Cloudflare Pages | Free tier, global CDN, auto-deploy on push |
+| API Proxy | Cloudflare Pages Functions (`/functions/api/proxy.ts`) | CORS bypass, allowlist-protected |
+| Tunnels | Cloudflare Tunnels | All self-hosted services exposed via tunnel |
+| Auth | Cloudflare Access (Zero Trust) | Email OTP policy, protects all routes |
+| Tile Layout | react-grid-layout | Drag, drop, resize, per-preset layout persistence |
+| State | Zustand + persist middleware | Config in `play-dashboard-config-v1`, tiles in `play-dashboard-tiles-v4` |
+| Styling | Tailwind CSS + custom CSS | Dark blue underglow theme |
+| Animations | Framer Motion | Sidebar collapse, page transitions |
 
 ---
 
 ## Design Aesthetic
 
-### Dark Blue Underglow
-A deep media-center feel — think Plex-meets-gaming-setup. Dark navy/black backgrounds with neon blue and teal underglow effects. Different from the work dashboard's purple nebula.
+### Dark Blue Underglow — "CRONUS"
+Deep media-center feel. Dark navy/black backgrounds with neon blue and teal underglow effects, animated dot grid, and independently breathing tile borders.
 
-- **Backgrounds:** Deep navy `#050810` to near-black `#020408`
-- **Primary glow:** Electric blue `#00aaff` with soft underglow halos
-- **Secondary glow:** Cyan/teal `#00e5cc`
-- **Accent:** Hot blue-white `#60c8ff` for highlights
-- **Cards:** Dark navy glass with blue border glow on hover
-- **Grid pattern:** Subtle blue dot matrix that breathes
+- **Backgrounds:** Deep navy `#050810` base
+- **Glow layers:** Bottom-center blue pool, teal bottom-right, blue top-left, purple-blue top-right, ambient center wash — all pulsing independently
+- **Tiles:** Gradient border via CSS mask technique (bright blue top → teal bottom), breathing box-shadow, stronger glow on hover
+- **Status dots:** Double-layered glow (inner + outer ring)
 - **Text:** Cool white `#e0f0ff` primary, muted blue-grey secondary
-
-### Mobile First
-Key features designed for mobile (replacing nzb360 on Android):
-- Bottom navigation bar on mobile
-- Touch-friendly tile interactions
-- Swipe gestures for quick actions
-- Compact card views for small screens
+- **Branding:** CRONUS logo (custom artwork) in sidebar header
 
 ---
 
 ## Tile Dashboard System
 
 ### How It Works
-- **react-grid-layout** powers a responsive snap-to-grid canvas
-- Tiles are draggable and resizable (snap to grid units)
-- Layout saved to localStorage per user
-- Layout presets available as starting points
-- Each tile can be shown/hidden via a tile manager panel
-- Tile sizes: Small (1×1), Medium (2×1), Wide (2×2), Large (3×2), Full-width (4×2)
+- **react-grid-layout** powers a responsive snap-to-grid canvas (12 columns, 80px row height)
+- Tiles are draggable and resizable in Edit Mode
+- **Per-preset layout persistence** — each preset saves edits independently in `savedLayouts`
+- Tile visibility toggled per-tile via sidebar checkboxes
+- Fallback layout entry for any tile missing a position
 
 ### Layout Presets
-- **Media Focus** — Overseerr search front and center, Plex now playing, download queue
-- **Admin Mode** — Unraid stats, SABnzbd queue, Sonarr/Radarr grids, Discord log
-- **Mobile** — Streamlined single-column, touch-optimized tiles
-- **Custom** — User's saved layout
+- **Media Focus** — Overseerr front and center, Plex, Tautulli, download stack
+- **Admin Mode** — Unraid, SABnzbd, Sonarr/Radarr, Discord, system tiles
 
 ---
 
-## Services & Tiles
+## Services & Tiles — Current Status
 
-### 🎬 Plex
-- Now Playing — active streams with user, media, progress bar
-- Recent activity
-- Library stats (movies, shows, episodes counts)
-- Quick launch button
+### ✅ Plex
+- Now Playing — active streams with user, media, progress bar, play state color
+- Library stats — fetches per-section item counts via `/library/sections/{key}/all`
+- Connects via Cloudflare Tunnel (`https://plex.cronus.nexus → 192.168.1.100:32400`)
 
-### 🔍 Overseerr
-- **Search bar tile** (prominent) — search movies and TV shows
-- Trending / Popular suggestions
-- Pending requests list
-- Request status tracker
-- Approve/deny requests (if admin)
+### ✅ Overseerr
+- Search bar — live search movies & TV shows, request button, media status badge
+- Recent Requests — title enriched via parallel `/api/v1/movie/{tmdbId}` + `/api/v1/tv/{tmdbId}` fetches
+- Shows requester, date (Today/Yesterday/date), status badge (Pending/Approved/Partial/Declined/Available)
+- Available status derived from `mediaInfo.status === 5` on enriched media
 
-### 📺 Sonarr
-- Monitored series list
-- Download queue with progress
-- Calendar view (upcoming episodes)
-- Missing episodes
-- Quick search + add series
+### ✅ Sonarr
+- Queue tab — download progress bars, time left, warning state
+- Upcoming tab — calendar view with air dates (Today/Tomorrow/date), downloaded indicator
+- Fixed: series title null crash, flex fill height, `type="button"` on tab buttons
 
-### 🎥 Radarr
-- Monitored movies list
-- Download queue with progress
-- Missing movies
-- Quick search + add movie
+### ✅ Radarr
+- Queue tab — download progress bars per movie
+- Upcoming tab — digital/physical/cinema release dates
+- Same layout fixes as Sonarr
 
-### ⬇️ SABnzbd
-- Active download queue with speed graph (animated)
-- Download speed / daily total
-- History (recent completed)
-- Pause / Resume / Clear controls
+### ✅ SABnzbd
+- Active download queue with per-item progress
+- Speed, queue size, disk free
+- Pause/Resume controls
 
-### 📊 Tautulli
-- Watch time stats (daily/weekly/monthly)
-- Top users, top media
-- Stream count graph
-- Recently watched
+### ✅ Tautulli
+- Active streams with progress bars and state colors
+- Falls back to "Top this week" — top users, movies, shows when nothing playing
 
-### 🖥️ Unraid
-- Disk usage per array drive (visual bar per disk)
-- Overall array health (green/yellow/red)
-- CPU + RAM usage (animated gauges)
-- Docker containers — list with start/stop toggle per container
-- Temperature readings
-- Network throughput
+### ⚠️ Unraid
+- Array state + per-disk usage bars implemented
+- Blocked by Unraid 7 CSRF token protection on Connect API — skipped for now
+- CPU/RAM fields removed (schema changed in v7)
 
-### 💬 Discord
-- Read-only log channel viewer
-- Latest N messages displayed as a feed
-- Color-coded by message type (info / warning / error)
-- Auto-refreshes on interval
-- Filterable by keyword
+### ✅ Discord (split into two tiles)
+- **Discord Info** (`#5865f2`) — reads info channel via Bot API
+- **Discord Alerts** (`#ed4245`) — reads alerts channel via Bot API
+- Full embed rendering (author, title, description, fields, footer, images)
+- Requires Message Content Intent enabled in Discord Developer Portal
+- Polls every 30s
 
-### ⬆️ Uptime Monitor (built-in, replaces Uptime Robot)
-- Ping-based uptime checks for all configured services
-- Status badges (up/down/degraded)
-- Response time graph
-- Incident history
-- Configurable check interval
+### ✅ Uptime Monitor
+- Ping checks for configured services
+- Status badges
 
-### ☁️ Nextcloud File Explorer
-- Midnight Commander style — dual-pane file browser
-- Browse, move, copy, delete files
-- Upload / download
-- Preview images
-- Keyboard shortcut navigation
+### 🔲 Nextcloud
+- Tile exists (hidden by default), not yet implemented
 
-### 🍽️ Mealie
-- Quick-link tile only (opens Mealie in new tab)
-- Optional: latest recipes widget
+### 🔲 Mealie
+- Tile exists (hidden by default), not yet implemented
 
 ---
 
-## Setup & Configuration
+## Security
 
-### First-Run Setup Wizard
-When no config is detected, a setup wizard walks the user through:
+### Cloudflare Access
+- Zero Trust policy on `play.cronus.nexus` — email OTP, blocks all unauthenticated access
 
-1. **Welcome** — brief intro, link to GitHub docs
-2. **Google OAuth** — paste Client ID + Secret
-3. **Services** — toggle which services you use, enter each:
-   - Tunnel URL (e.g. `https://plex.yourdomain.com`)
-   - API key
-4. **Discord** — Bot token + channel ID (optional)
-5. **Unraid** — IP/hostname + API key (optional)
-6. **Test connections** — green/red status per service
-7. **Pick a layout preset** — choose starting tile layout
-8. **Done**
+### Proxy Allowlist
+- `PROXY_ALLOWLIST` env var in Cloudflare Pages restricts proxy to known service URLs only
+- Prevents open relay abuse
 
-### Config Storage
-- API keys / secrets → Cloudflare Workers secrets (never in code or git)
-- For open source users: a `config.example.env` with all variable names documented
-- Tile layout → localStorage (per browser)
-- User preferences → Cloudflare KV
-
-### For Open Source Users
-```
-1. Fork the repo
-2. Connect to Cloudflare Pages
-3. Run the setup wizard or fill in environment variables
-4. Deploy
-```
-Full README with step-by-step setup for each service.
+### API Keys
+- Stored in browser localStorage (`play-dashboard-config-v1`)
+- Never committed to git
+- Sent to proxy at request time via forwarded headers (`X-Api-Key`, `X-Authorization`, etc.)
 
 ---
 
 ## Architecture
 
 ```
-play.cronus.nexus
-├── Cloudflare Pages (React SPA)
-│   └── /src
-│       ├── pages/
-│       │   ├── Dashboard.tsx      # Main tile canvas
-│       │   ├── Setup.tsx          # First-run wizard
-│       │   └── Settings.tsx       # Edit config after setup
-│       ├── tiles/                 # One component per service tile
-│       │   ├── PlexTile.tsx
-│       │   ├── OverseerrTile.tsx
-│       │   ├── SonarrTile.tsx
-│       │   ├── RadarrTile.tsx
-│       │   ├── SabnzbdTile.tsx
-│       │   ├── TautulliTile.tsx
-│       │   ├── UnraidTile.tsx
-│       │   ├── DiscordTile.tsx
-│       │   ├── UptimeTile.tsx
-│       │   └── NextcloudTile.tsx
-│       ├── components/
-│       │   ├── TileCanvas.tsx     # react-grid-layout wrapper
-│       │   ├── TileManager.tsx    # Show/hide/resize controls
-│       │   ├── Nav.tsx
-│       │   └── MobileNav.tsx
-│       ├── hooks/                 # usePlex, useOverseerr, useSonarr, etc.
-│       ├── store/                 # Zustand — layout, config, auth
-│       └── api/                   # Client-side callers → Pages Functions
+play.cronus.nexus (Cloudflare Pages)
+├── src/
+│   ├── App.tsx                    # Background glow layers, routing, sidebar
+│   ├── pages/
+│   │   ├── Dashboard.tsx          # react-grid-layout tile canvas
+│   │   └── Settings.tsx           # API key configuration
+│   ├── tiles/                     # One component per service
+│   │   ├── PlexTile.tsx
+│   │   ├── OverseerrTile.tsx
+│   │   ├── SonarrTile.tsx
+│   │   ├── RadarrTile.tsx
+│   │   ├── SabnzbdTile.tsx
+│   │   ├── TautulliTile.tsx
+│   │   ├── UnraidTile.tsx
+│   │   ├── DiscordTile.tsx        # Shared DiscordChannelTile component
+│   │   ├── DiscordAlertsTile.tsx  # Thin wrapper → DiscordChannelTile
+│   │   ├── UptimeTile.tsx
+│   │   ├── NextcloudTile.tsx
+│   │   └── MealieTile.tsx
+│   ├── hooks/                     # usePlex, useOverseerr, useSonarr, useRadarr,
+│   │                              # useSabnzbd, useTautulli, useUnraid,
+│   │                              # useDiscord (useDiscordChannel), useUptime
+│   ├── store/
+│   │   ├── useTileStore.ts        # Layout, presets, savedLayouts, tile visibility
+│   │   └── useConfigStore.ts      # Service URLs + API keys (persisted)
+│   ├── components/
+│   │   ├── Sidebar.tsx            # CRONUS logo, nav, layout controls, tile toggles
+│   │   ├── TileWrapper.tsx        # Shared tile chrome (header, status dot, body)
+│   │   ├── AppIcon.tsx            # Service icon map
+│   │   └── MobileNav.tsx
+│   ├── lib/
+│   │   └── proxyFetch.ts          # Wraps all API calls through /api/proxy
+│   └── assets/
+│       └── cronus-logo.png        # Sidebar branding
 │
-└── Cloudflare Pages Functions (/functions)
-    ├── auth/              # Google OAuth
-    ├── proxy/             # Generic CF tunnel proxy (avoids CORS)
-    ├── plex/
-    ├── overseerr/
-    ├── sonarr/
-    ├── radarr/
-    ├── sabnzbd/
-    ├── tautulli/
-    ├── unraid/
-    ├── discord/
-    ├── nextcloud/
-    └── uptime/            # Server-side ping checks
+└── functions/
+    └── api/
+        └── proxy.ts               # Cloudflare Pages Function — CORS proxy with allowlist
 ```
-
-**Secrets (Cloudflare Workers):**
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
-- `PLEX_TOKEN` + `PLEX_URL`
-- `OVERSEERR_API_KEY` + `OVERSEERR_URL`
-- `SONARR_API_KEY` + `SONARR_URL`
-- `RADARR_API_KEY` + `RADARR_URL`
-- `SABNZBD_API_KEY` + `SABNZBD_URL`
-- `TAUTULLI_API_KEY` + `TAUTULLI_URL`
-- `UNRAID_API_KEY` + `UNRAID_URL`
-- `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID`
-- `NEXTCLOUD_URL` + `NEXTCLOUD_USER` + `NEXTCLOUD_PASSWORD`
-
----
-
-## Mobile Strategy
-
-Features that matter most on mobile (nzb360 replacement):
-- Overseerr search + requests
-- SABnzbd queue management (pause/resume)
-- Sonarr / Radarr queue + add content
-- Unraid container start/stop
-- Discord log viewer
-- Uptime status at a glance
-
-Mobile nav: bottom tab bar with 5 most-used sections.
-Tiles reflow to single column on mobile with touch-friendly sizing.
 
 ---
 
 ## Build Phases
 
-### Phase 1 — Scaffold & Shell
-- Vite + React + TypeScript in `/Play`
-- Dark blue underglow theme system
-- react-grid-layout tile canvas (drag/resize/snap)
-- Nav (desktop sidebar + mobile bottom bar)
-- Empty tile shells for all services
-- Layout preset system
-- Setup wizard UI (no backend yet)
+### ✅ Phase 1 — Scaffold & Shell
+- Vite + React + TypeScript
+- Dark blue underglow theme, dot grid, glow layers
+- react-grid-layout tile canvas with drag/resize/snap
+- Desktop sidebar + mobile bottom nav
+- Layout preset system with per-preset save
 
-### Phase 2 — Download Stack
-- SABnzbd integration (queue, speed, controls)
-- Sonarr integration (queue, calendar, search)
-- Radarr integration (queue, search)
-- Overseerr search + requests
+### ✅ Phase 2 — Download Stack
+- SABnzbd, Sonarr, Radarr, Overseerr — all connected and working
 
-### Phase 3 — Server & Media
-- Plex now playing + stats
+### ✅ Phase 3 — Server & Media
+- Plex now playing + library counts
 - Tautulli analytics
-- Unraid disk/CPU/RAM + docker controls
+- Unraid — partially implemented, blocked by CSRF
 
-### Phase 4 — Communication & Monitoring
-- Discord log channel reader
-- Built-in uptime monitor
-- Nextcloud file explorer
+### ✅ Phase 4 — Communication & Monitoring
+- Discord split into two independent channel tiles (Info + Alerts)
+- Uptime monitor tile
 
-### Phase 5 — Polish & Open Source Release
+### 🔲 Phase 5 — Polish & Open Source Release
+- Nextcloud file explorer tile
+- Mealie tile
 - Mobile pass — full nzb360 parity
-- Setup wizard complete with connection testing
+- Setup wizard with connection testing
 - README + docs for open source release
-- `config.example.env` and GitHub repo polish
 
 ---
 
-## Open Questions
+## Open Questions / Known Issues
 
-| Question | Status |
+| Item | Status |
 |---|---|
-| Unraid API method — community plugin or direct? | Needs research |
-| Discord read — bot token or OAuth? | Needs research |
-| Nextcloud WebDAV vs API for file management? | Needs research |
-| Should layout be saved to KV (sync across devices) or localStorage only? | Decide in Phase 1 |
-| Plex API — direct or via Tautulli for everything? | Decide in Phase 2 |
+| Unraid 7 CSRF token — Connect API requires session cookies, incompatible with stateless proxy | Skipped — needs research into alternative auth |
+| Nextcloud WebDAV vs API for file management | Not started |
+| Mealie widget | Not started |
+| Layout sync across devices (currently localStorage only) | Future consideration |
+| Plex direct connect — uses Cloudflare Tunnel via `plex.cronus.nexus → 192.168.1.100:32400` | Working ✅ |
