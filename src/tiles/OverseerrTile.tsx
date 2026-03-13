@@ -7,7 +7,7 @@ import type { OverseerrResult, OverseerrRequest } from '@/hooks/useOverseerr'
 function mediaTitle(item: OverseerrResult | OverseerrRequest) {
   if ('title' in item && item.title) return item.title
   if ('name' in item && (item as OverseerrResult).name) return (item as OverseerrResult).name!
-  if ('media' in item) return (item as OverseerrRequest).media.title ?? (item as OverseerrRequest).media.originalTitle ?? '?'
+  if ('media' in item) return (item as OverseerrRequest).media.title ?? '?'
   return '?'
 }
 
