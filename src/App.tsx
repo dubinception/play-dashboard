@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Sidebar from '@/components/Sidebar'
@@ -5,9 +6,15 @@ import MobileNav from '@/components/MobileNav'
 import Dashboard from '@/pages/Dashboard'
 import Settings from '@/pages/Settings'
 import useTileStore from '@/store/useTileStore'
+import useConfigStore from '@/store/useConfigStore'
 
 export default function App() {
   const { editMode, sidebarCollapsed } = useTileStore()
+  const loadFromKV = useConfigStore((s) => s.loadFromKV)
+
+  useEffect(() => {
+    loadFromKV()
+  }, [])
   const sidebarWidth = sidebarCollapsed ? 60 : 220
 
   return (
