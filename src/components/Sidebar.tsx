@@ -33,29 +33,37 @@ export default function Sidebar() {
       }}
     >
       {/* Logo row */}
-      <div style={{
-        padding: '16px 12px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, minWidth: 0,
-      }}>
-        <img src={cronusLogo} alt="Cronus" style={{ width: 32, height: 32, borderRadius: '6px', flexShrink: 0 }} />
-        {!sidebarCollapsed && (
+      {sidebarCollapsed ? (
+        <div style={{
+          padding: '12px 0', borderBottom: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flexShrink: 0,
+        }}>
+          <img src={cronusLogo} alt="Cronus" style={{ width: 32, height: 32, borderRadius: '6px' }} />
+          <button type="button" onClick={toggleSidebar} style={{
+            background: 'transparent', border: 'none',
+            color: 'var(--text-muted)', cursor: 'pointer',
+            fontSize: '1.1rem', padding: '2px 4px', lineHeight: 1,
+          }}>›</button>
+        </div>
+      ) : (
+        <div style={{
+          padding: '16px 12px', borderBottom: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0,
+        }}>
+          <img src={cronusLogo} alt="Cronus" style={{ width: 32, height: 32, borderRadius: '6px', flexShrink: 0 }} />
           <span className="gradient-text" style={{
             fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700,
             fontSize: '1.1rem', whiteSpace: 'nowrap', flex: 1,
           }}>
             CRONUS
           </span>
-        )}
-        <button onClick={toggleSidebar} style={{
-          marginLeft: sidebarCollapsed ? 'auto' : undefined,
-          background: 'transparent', border: 'none',
-          color: 'var(--text-muted)', cursor: 'pointer',
-          fontSize: '1.1rem', padding: '2px 4px', flexShrink: 0,
-          lineHeight: 1,
-        }}>
-          {sidebarCollapsed ? '›' : '‹'}
-        </button>
-      </div>
+          <button type="button" onClick={toggleSidebar} style={{
+            background: 'transparent', border: 'none',
+            color: 'var(--text-muted)', cursor: 'pointer',
+            fontSize: '1.1rem', padding: '2px 4px', flexShrink: 0, lineHeight: 1,
+          }}>‹</button>
+        </div>
+      )}
 
       {/* Nav links */}
       <div style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
