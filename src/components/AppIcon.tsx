@@ -8,7 +8,8 @@ import { TbActivityHeartbeat } from 'react-icons/tb'
 import { RiRobotFill } from 'react-icons/ri'
 
 export type AppIconId = 'plex' | 'overseerr' | 'sonarr' | 'radarr' | 'sabnzbd'
-  | 'tautulli' | 'unraid' | 'discord' | 'uptime' | 'nextcloud' | 'mealie' | 'robot'
+  | 'tautulli' | 'unraid' | 'discord' | 'discordInfo' | 'discordAlerts'
+  | 'uptime' | 'nextcloud' | 'mealie' | 'robot'
 
 interface Props {
   id: AppIconId
@@ -19,7 +20,9 @@ interface Props {
 
 const iconMap: Record<AppIconId, React.ComponentType<{ size?: number; color?: string; style?: React.CSSProperties }>> = {
   plex:      SiPlex,
-  discord:   SiDiscord,
+  discord:        SiDiscord,
+  discordInfo:    SiDiscord,
+  discordAlerts:  SiDiscord,
   nextcloud: SiNextcloud,
   sonarr:    SiSonarr,
   radarr:    SiRadarr,
@@ -35,7 +38,9 @@ const iconMap: Record<AppIconId, React.ComponentType<{ size?: number; color?: st
 // Fallback for icons that don't render well — override with branded SVG paths
 const brandedColors: Partial<Record<AppIconId, string>> = {
   plex:      '#e5a00d',
-  discord:   '#5865f2',
+  discord:        '#5865f2',
+  discordInfo:    '#5865f2',
+  discordAlerts:  '#ed4245',
   nextcloud: '#0082c9',
   sonarr:    '#35c5f4',
   radarr:    '#ffc230',

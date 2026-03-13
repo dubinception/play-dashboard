@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import useTileStore, { TILE_REGISTRY } from '@/store/useTileStore'
 import AppIcon from '@/components/AppIcon'
 import type { AppIconId } from '@/components/AppIcon'
-import { RiRobotFill } from 'react-icons/ri'
+import cronusLogo from '@/assets/cronus-logo.png'
 
 const pages = [
   { to: '/',         label: 'Dashboard', icon: '▦' },
@@ -37,13 +37,13 @@ export default function Sidebar() {
         padding: '16px 12px', borderBottom: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, minWidth: 0,
       }}>
-        <RiRobotFill size={22} color="var(--accent-1)" style={{ flexShrink: 0 }} />
+        <img src={cronusLogo} alt="Cronus" style={{ width: 32, height: 32, borderRadius: '6px', flexShrink: 0 }} />
         {!sidebarCollapsed && (
           <span className="gradient-text" style={{
             fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700,
             fontSize: '1.1rem', whiteSpace: 'nowrap', flex: 1,
           }}>
-            PLAY
+            CRONUS
           </span>
         )}
         <button onClick={toggleSidebar} style={{

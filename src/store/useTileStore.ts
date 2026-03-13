@@ -4,7 +4,8 @@ import type { Layout } from 'react-grid-layout'
 
 export type TileId =
   | 'plex' | 'overseerr' | 'sonarr' | 'radarr'
-  | 'sabnzbd' | 'tautulli' | 'unraid' | 'discord'
+  | 'sabnzbd' | 'tautulli' | 'unraid'
+  | 'discordInfo' | 'discordAlerts'
   | 'uptime' | 'nextcloud' | 'mealie'
 
 export interface TileConfig {
@@ -22,7 +23,8 @@ export const TILE_REGISTRY: TileConfig[] = [
   { id: 'plex',      label: 'Plex',       visible: true,  color: '#e5a00d' },
   { id: 'tautulli',  label: 'Tautulli',   visible: true,  color: '#f5a623' },
   { id: 'unraid',    label: 'Unraid',     visible: true,  color: '#ff6b35' },
-  { id: 'discord',   label: 'Discord',    visible: true,  color: '#5865f2' },
+  { id: 'discordInfo',   label: 'Discord Info',   visible: true, color: '#5865f2' },
+  { id: 'discordAlerts', label: 'Discord Alerts', visible: true, color: '#ed4245' },
   { id: 'uptime',    label: 'Uptime',     visible: true,  color: '#00e5a0' },
   { id: 'nextcloud', label: 'Nextcloud',  visible: false, color: '#0082c9' },
   { id: 'mealie',    label: 'Mealie',     visible: false, color: '#4caf50' },
@@ -38,14 +40,16 @@ const PRESETS: Record<string, Layout[]> = {
     { i: 'radarr',    x: 0, y: 6,  w: 3, h: 3 },
     { i: 'uptime',    x: 3, y: 6,  w: 4, h: 3 },
     { i: 'unraid',    x: 7, y: 6,  w: 5, h: 3 },
-    { i: 'discord',   x: 0, y: 9,  w: 12, h: 4 },
+    { i: 'discordInfo',   x: 0, y: 9,  w: 6, h: 4 },
+    { i: 'discordAlerts', x: 6, y: 9,  w: 6, h: 4 },
     { i: 'nextcloud', x: 0, y: 13, w: 6, h: 4 },
     { i: 'mealie',    x: 6, y: 13, w: 3, h: 2 },
   ],
   'Admin Mode': [
     { i: 'unraid',    x: 0, y: 0,  w: 6, h: 5 },
     { i: 'uptime',    x: 6, y: 0,  w: 6, h: 3 },
-    { i: 'discord',   x: 6, y: 3,  w: 6, h: 5 },
+    { i: 'discordInfo',   x: 6, y: 3,  w: 3, h: 5 },
+    { i: 'discordAlerts', x: 9, y: 3,  w: 3, h: 5 },
     { i: 'sabnzbd',   x: 0, y: 5,  w: 4, h: 4 },
     { i: 'sonarr',    x: 4, y: 5,  w: 4, h: 4 },
     { i: 'radarr',    x: 8, y: 8,  w: 4, h: 4 },
@@ -60,49 +64,68 @@ const PRESETS: Record<string, Layout[]> = {
 interface TileStore {
   tiles: TileConfig[]
   layout: Layout[]
+  savedLayouts: Record<string, Layout[]>
   activePreset: string
   editMode: boolean
   sidebarCollapsed: boolean
-  // Fix: merges only visible tiles' new positions, preserving hidden tiles' positions
   setLayout: (newLayout: Layout[]) => void
   toggleTile: (id: TileId) => void
   applyPreset: (name: string) => void
+  resetPreset: (name: string) => void
   toggleEditMode: () => void
   toggleSidebar: () => void
 }
 
 const useTileStore = create<TileStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       tiles: TILE_REGISTRY,
       layout: PRESETS['Media Focus'],
+      savedLayouts: {},
       activePreset: 'Media Focus',
       editMode: false,
       sidebarCollapsed: false,
 
-      // Only update positions for tiles in newLayout; preserve positions of hidden tiles
+      // Merges visible tile positions and saves them under the active preset
       setLayout: (newLayout) =>
-        set((s) => ({
-          layout: s.layout.map((existing) => {
+        set((s) => {
+          const merged = s.layout.map((existing) => {
             const updated = newLayout.find((l) => l.i === existing.i)
             return updated ? { ...existing, ...updated } : existing
-          }),
-        })),
+          })
+          return {
+            layout: merged,
+            savedLayouts: { ...s.savedLayouts, [s.activePreset]: merged },
+          }
+        }),
 
       toggleTile: (id) =>
         set((s) => ({
           tiles: s.tiles.map((t) => (t.id === id ? { ...t, visible: !t.visible } : t)),
         })),
 
+      // Restores the saved layout for that preset, falling back to the default
       applyPreset: (name) => {
         const preset = PRESETS[name]
-        if (preset) set({ layout: preset, activePreset: name })
+        if (!preset) return
+        const saved = get().savedLayouts[name]
+        set({ layout: saved ?? preset, activePreset: name })
+      },
+
+      // Resets a preset back to its default, clearing any saved edits
+      resetPreset: (name) => {
+        const preset = PRESETS[name]
+        if (!preset) return
+        set((s) => ({
+          layout: s.activePreset === name ? preset : s.layout,
+          savedLayouts: { ...s.savedLayouts, [name]: undefined as unknown as Layout[] },
+        }))
       },
 
       toggleEditMode: () => set((s) => ({ editMode: !s.editMode })),
       toggleSidebar:  () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
     }),
-    { name: 'play-dashboard-tiles-v2' }
+    { name: 'play-dashboard-tiles-v4' }
   )
 )
 

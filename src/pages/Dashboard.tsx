@@ -13,7 +13,8 @@ import RadarrTile    from '@/tiles/RadarrTile'
 import PlexTile      from '@/tiles/PlexTile'
 import TautulliTile  from '@/tiles/TautulliTile'
 import UnraidTile    from '@/tiles/UnraidTile'
-import DiscordTile   from '@/tiles/DiscordTile'
+import DiscordTile        from '@/tiles/DiscordTile'
+import DiscordAlertsTile  from '@/tiles/DiscordAlertsTile'
 import UptimeTile    from '@/tiles/UptimeTile'
 import NextcloudTile from '@/tiles/NextcloudTile'
 import MealieTile    from '@/tiles/MealieTile'
@@ -26,7 +27,8 @@ const TILE_MAP: Record<string, React.ComponentType> = {
   plex:      PlexTile,
   tautulli:  TautulliTile,
   unraid:    UnraidTile,
-  discord:   DiscordTile,
+  discordInfo:   DiscordTile,
+  discordAlerts: DiscordAlertsTile,
   uptime:    UptimeTile,
   nextcloud: NextcloudTile,
   mealie:    MealieTile,
