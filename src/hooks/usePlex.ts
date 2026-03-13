@@ -43,7 +43,8 @@ function isPlexConfigured() {
 
 function plexUrl(path: string) {
   const { url, token } = getPlexConfig()
-  return `${url}${path}?X-Plex-Token=${encodeURIComponent(token)}`
+  const sep = path.includes('?') ? '&' : '?'
+  return `${url}${path}${sep}X-Plex-Token=${encodeURIComponent(token)}`
 }
 
 export function usePlex(): UsePlexReturn {
