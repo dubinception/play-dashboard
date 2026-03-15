@@ -26,3 +26,18 @@ export async function proxyPost(targetUrl: string, body: unknown, extraHeaders?:
     body: JSON.stringify(body),
   })
 }
+
+export async function proxyPut(targetUrl: string, body: unknown, extraHeaders?: Record<string, string>): Promise<Response> {
+  return fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`, {
+    method: 'PUT',
+    headers: { ...cfHeaders(), 'Content-Type': 'application/json', ...extraHeaders },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function proxyDelete(targetUrl: string, extraHeaders?: Record<string, string>): Promise<Response> {
+  return fetch(`/api/proxy?url=${encodeURIComponent(targetUrl)}`, {
+    method: 'DELETE',
+    headers: { ...cfHeaders(), ...extraHeaders },
+  })
+}

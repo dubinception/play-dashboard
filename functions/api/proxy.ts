@@ -50,19 +50,29 @@ async function handle(context: EventContext<Env, string, unknown>): Promise<Resp
   if (authorization)  headers['Authorization']           = authorization
   if (requestedWith)  headers['X-Requested-With']        = requestedWith
 
-  const isPost = context.request.method === 'POST'
-  if (isPost) headers['Content-Type'] = 'application/json'
+  const method = context.request.method
+  const hasBody = method === 'POST' || method === 'PUT'
+  if (hasBody) headers['Content-Type'] = 'application/json'
 
   try {
     const response = await fetch(target, {
-      method: isPost ? 'POST' : 'GET',
+      method,
       headers,
-      body: isPost ? context.request.body : undefined,
+      body: hasBody ? context.request.body : undefined,
     })
+    const contentType = response.headers.get('Content-Type') ?? 'application/json'
+    const isImage = contentType.startsWith('image/')
+    if (isImage) {
+      const buffer = await response.arrayBuffer()
+      return new Response(buffer, {
+        status: response.status,
+        headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=3600' },
+      })
+    }
     const body = await response.text()
     return new Response(body, {
       status: response.status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': contentType.includes('json') ? 'application/json' : contentType },
     })
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
@@ -71,5 +81,7 @@ async function handle(context: EventContext<Env, string, unknown>): Promise<Resp
   }
 }
 
-export const onRequestGet: PagesFunction<Env> = handle
-export const onRequestPost: PagesFunction<Env> = handle
+export const onRequestGet:    PagesFunction<Env> = handle
+export const onRequestPost:   PagesFunction<Env> = handle
+export const onRequestPut:    PagesFunction<Env> = handle
+export const onRequestDelete: PagesFunction<Env> = handle
