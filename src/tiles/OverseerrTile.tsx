@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import TileWrapper from '@/components/TileWrapper'
 import { useOverseerr, MEDIA_STATUS, REQUEST_STATUS } from '@/hooks/useOverseerr'
 import useConfigStore from '@/store/useConfigStore'
@@ -353,8 +353,12 @@ function DiscoverTab({
   const genreList    = mode === 'movie_genre' ? movieGenres : tvGenres
   const currentId    = needsGenre ? genreId : needsNetwork ? networkId : undefined
 
+  const gridContainerRef = useRef<HTMLDivElement>(null)
+  const prevLengthRef    = useRef(0)
+
   // Fire discover when mode changes (for non-filtered modes)
   useEffect(() => {
+    prevLengthRef.current = 0
     if (!needsGenre && !needsNetwork) {
       onDiscover(mode)
     }
@@ -362,6 +366,25 @@ function DiscoverTab({
     setNetworkId(0)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
+
+  // Auto-fill: keep loading pages until content fills the scroll container
+  useEffect(() => {
+    if (discoverLoading) return
+    if (discoverPage >= discoverTotalPages) return
+    if (results.length === 0) return
+    if (results.length <= prevLengthRef.current) return  // no new items added
+    prevLengthRef.current = results.length
+
+    const el = gridContainerRef.current
+    if (!el || el.clientHeight === 0) return
+    // If content doesn't require scrolling yet, fetch next page
+    if (el.scrollHeight <= el.clientHeight + 20) {
+      onDiscover(mode, currentId, discoverPage + 1)
+    }
+  }, [results.length, discoverLoading, discoverPage, discoverTotalPages, mode, currentId, onDiscover])
+
+  // Reset prevLength when filter id changes
+  useEffect(() => { prevLengthRef.current = 0 }, [genreId, networkId])
 
   const handleGenre = (id: number) => {
     setGenreId(id)
@@ -371,10 +394,6 @@ function DiscoverTab({
   const handleNetwork = (id: number) => {
     setNetworkId(id)
     if (id) onDiscover(mode, id, 1)
-  }
-
-  const handleLoadMore = () => {
-    onDiscover(mode, currentId, discoverPage + 1)
   }
 
   const subPillStyle = (active: boolean): React.CSSProperties => ({
@@ -387,7 +406,7 @@ function DiscoverTab({
   })
 
   const showGrid = (!needsGenre || genreId > 0) && (!needsNetwork || networkId > 0)
-  const hasMore  = discoverPage < discoverTotalPages
+  const hasMore  = discoverPage < discoverTotalPages && !discoverLoading
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 7 }}>
@@ -421,8 +440,8 @@ function DiscoverTab({
         </div>
       )}
 
-      {/* Poster grid + load more */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      {/* Poster grid */}
+      <div ref={gridContainerRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {showGrid ? (
           <>
             <PosterGrid
@@ -431,23 +450,26 @@ function DiscoverTab({
               onRequest={onRequest}
               loading={discoverLoading && discoverPage === 1}
             />
-            {/* Load more */}
-            {(hasMore || (discoverLoading && discoverPage > 1)) && (
+            {/* Manual load-more fallback (shown only if auto-fill stopped due to scroll) */}
+            {hasMore && (
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4 }}>
                 <button
-                  onClick={handleLoadMore}
-                  disabled={discoverLoading}
+                  onClick={() => onDiscover(mode, currentId, discoverPage + 1)}
                   style={{
-                    padding: '6px 22px', borderRadius: 20,
-                    border: `1px solid ${ACCENT}55`,
-                    background: 'rgba(229,160,13,0.08)',
-                    color: ACCENT, fontSize: '0.72rem', fontWeight: 600,
-                    cursor: discoverLoading ? 'wait' : 'pointer',
-                    fontFamily: 'inherit',
+                    padding: '5px 18px', borderRadius: 20,
+                    border: `1px solid ${ACCENT}44`,
+                    background: 'transparent',
+                    color: 'var(--text-muted)', fontSize: '0.68rem',
+                    cursor: 'pointer', fontFamily: 'inherit',
                   }}
                 >
-                  {discoverLoading ? 'Loading…' : `Load more  ·  pg ${discoverPage} / ${discoverTotalPages}`}
+                  Load more
                 </button>
+              </div>
+            )}
+            {discoverLoading && discoverPage > 1 && (
+              <div style={{ textAlign: 'center', padding: '8px 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Loading…
               </div>
             )}
           </>
