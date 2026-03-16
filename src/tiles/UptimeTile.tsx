@@ -246,8 +246,8 @@ export default function UptimeTile() {
             )
           })}
 
-          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
-            Uptime % over last {tf.label} · click any service to expand
+          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 6, textAlign: 'center', opacity: 0.6 }}>
+            Last {tf.label} · tap to expand
           </div>
         </div>
       )}

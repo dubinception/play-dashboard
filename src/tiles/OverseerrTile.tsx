@@ -354,11 +354,9 @@ function DiscoverTab({
   const currentId    = needsGenre ? genreId : needsNetwork ? networkId : undefined
 
   const gridContainerRef = useRef<HTMLDivElement>(null)
-  const prevLengthRef    = useRef(0)
 
   // Fire discover when mode changes (for non-filtered modes)
   useEffect(() => {
-    prevLengthRef.current = 0
     if (!needsGenre && !needsNetwork) {
       onDiscover(mode)
     }
@@ -367,24 +365,29 @@ function DiscoverTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
-  // Auto-fill: keep loading pages until content fills the scroll container
+  // Auto-fill: keep loading pages until we have enough cards to fill the tile.
+  // We estimate capacity from the container's current width (card = 94px wide,
+  // row ≈ 168px tall) and add 2 extra rows as buffer. Falls back to 60 cards.
   useEffect(() => {
     if (discoverLoading) return
     if (discoverPage >= discoverTotalPages) return
     if (results.length === 0) return
-    if (results.length <= prevLengthRef.current) return  // no new items added
-    prevLengthRef.current = results.length
 
     const el = gridContainerRef.current
-    if (!el || el.clientHeight === 0) return
-    // If content doesn't require scrolling yet, fetch next page
-    if (el.scrollHeight <= el.clientHeight + 20) {
+    const colW = 94   // card(86) + gap(8)
+    const rowH = 168  // poster(128) + title(32) + gap(8)
+    let minItems = 60
+    if (el && el.clientWidth > 0 && el.clientHeight > 0) {
+      const cols = Math.max(2, Math.floor(el.clientWidth  / colW))
+      const rows = Math.max(3, Math.ceil (el.clientHeight / rowH)) + 2
+      minItems = cols * rows
+    }
+
+    if (results.length < minItems) {
       onDiscover(mode, currentId, discoverPage + 1)
     }
-  }, [results.length, discoverLoading, discoverPage, discoverTotalPages, mode, currentId, onDiscover])
-
-  // Reset prevLength when filter id changes
-  useEffect(() => { prevLengthRef.current = 0 }, [genreId, networkId])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results.length, discoverLoading, discoverPage, discoverTotalPages])
 
   const handleGenre = (id: number) => {
     setGenreId(id)
