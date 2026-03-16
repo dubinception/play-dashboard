@@ -458,6 +458,12 @@ export default function RadarrTile() {
     }
   }, [libraryFetched, fetchLibrary])
 
+  // Fetch library on mount — all tabs (Upcoming, Queue, Missing) need poster data
+  useEffect(() => {
+    activateLibrary()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     if ((tab === 'library' || tab === 'missing') && !libraryFetched) {
       activateLibrary()
