@@ -6,34 +6,6 @@ import type { Layout } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 
-import OverseerrTile from '@/tiles/OverseerrTile'
-import SabnzbdTile   from '@/tiles/SabnzbdTile'
-import SonarrTile    from '@/tiles/SonarrTile'
-import RadarrTile    from '@/tiles/RadarrTile'
-import PlexTile      from '@/tiles/PlexTile'
-import TautulliTile  from '@/tiles/TautulliTile'
-import UnraidTile    from '@/tiles/UnraidTile'
-import DiscordTile        from '@/tiles/DiscordTile'
-import DiscordAlertsTile  from '@/tiles/DiscordAlertsTile'
-import UptimeTile    from '@/tiles/UptimeTile'
-import NextcloudTile from '@/tiles/NextcloudTile'
-import MealieTile    from '@/tiles/MealieTile'
-
-const TILE_MAP: Record<string, React.ComponentType> = {
-  overseerr: OverseerrTile,
-  sabnzbd:   SabnzbdTile,
-  sonarr:    SonarrTile,
-  radarr:    RadarrTile,
-  plex:      PlexTile,
-  tautulli:  TautulliTile,
-  unraid:    UnraidTile,
-  discordInfo:   DiscordTile,
-  discordAlerts: DiscordAlertsTile,
-  uptime:    UptimeTile,
-  nextcloud: NextcloudTile,
-  mealie:    MealieTile,
-}
-
 const DESKTOP_COLS = 12
 const ROW_HEIGHT   = 80
 const MARGIN: [number, number] = [12, 12]
@@ -65,7 +37,11 @@ function fallbackEntry(id: string, index: number): Layout {
   return { i: id, x: (index * 3) % 12, y: 999, w: 3, h: 3 }
 }
 
-export default function Dashboard() {
+interface Props {
+  tileMap: Record<string, React.ComponentType>
+}
+
+export default function Dashboard({ tileMap }: Props) {
   const { tiles, layout, setLayout, editMode, sidebarCollapsed } = useTileStore()
   const { width } = useWindowSize()
 
@@ -118,7 +94,7 @@ export default function Dashboard() {
         /* ── Mobile / tablet / small desktop: vertical stack ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {stackOrder.map(l => {
-            const TileComponent = TILE_MAP[l.i]
+            const TileComponent = tileMap[l.i]
             if (!TileComponent) return null
             const tileH = STACK_HEIGHTS[l.i] ?? Math.max(280, Math.min(l.h * ROW_HEIGHT, 520))
             return (
@@ -144,7 +120,7 @@ export default function Dashboard() {
           resizeHandles={['se']}
         >
           {visibleLayout.map((l) => {
-            const TileComponent = TILE_MAP[l.i]
+            const TileComponent = tileMap[l.i]
             return TileComponent ? (
               <div key={l.i} style={{ cursor: canEdit ? 'grab' : 'default' }}>
                 <TileComponent />
