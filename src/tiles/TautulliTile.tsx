@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import TileWrapper from '@/components/TileWrapper'
-import { useTautulli, tautulliThumbUrl } from '@/hooks/useTautulli'
+import { useTautulli, tautulliThumbTarget } from '@/hooks/useTautulli'
+import { proxyFetch } from '@/lib/proxyFetch'
 import useConfigStore from '@/store/useConfigStore'
 import type {
   TautulliSession, TautulliUser, TautulliHistoryItem,
@@ -8,6 +9,38 @@ import type {
 } from '@/hooks/useTautulli'
 
 const ACCENT = '#f5a623'
+
+// ── ProxiedImage ──────────────────────────────────────────────────────────────
+// Uses proxyFetch so CF-Access service-token headers are included — bare <img src>
+// tags skip custom headers and fail to authenticate to services behind CF Access.
+
+function ProxiedImage({ target, style, fallback }: {
+  target: string
+  style: React.CSSProperties
+  fallback?: React.ReactNode
+}) {
+  const [blobUrl, setBlobUrl] = useState('')
+  const [failed, setFailed]   = useState(false)
+
+  useEffect(() => {
+    if (!target) { setFailed(true); return }
+    let active = true
+    let created = ''
+    proxyFetch(target)
+      .then(r => r.ok ? r.blob() : Promise.reject())
+      .then(blob => {
+        if (!active) return
+        created = URL.createObjectURL(blob)
+        setBlobUrl(created)
+      })
+      .catch(() => { if (active) setFailed(true) })
+    return () => { active = false; if (created) URL.revokeObjectURL(created) }
+  }, [target])
+
+  if (failed) return <>{fallback ?? null}</>
+  if (!blobUrl) return <div style={{ ...style, background: 'rgba(255,255,255,0.06)', borderRadius: (style.borderRadius as number) ?? 4 }} />
+  return <img src={blobUrl} alt="" style={style} />
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +98,7 @@ function LineChart({ data }: { data: TautulliGraphData }) {
   const PAD = { t: 10, r: 8, b: 26, l: 26 }
   const cW = W - PAD.l - PAD.r
   const cH = H - PAD.t - PAD.b
+  if (!data?.categories?.length || !data?.series?.length) return null
   const n = data.categories.length
   if (n < 2) return null
 
@@ -127,6 +161,7 @@ function StackedBarChart({ data, shortenLabel }: { data: TautulliGraphData; shor
   const cH = H - PAD.t - PAD.b
   const bottom = PAD.t + cH
 
+  if (!data?.categories?.length || !data?.series?.length) return null
   const n = data.categories.length
   const tv  = data.series.find(s => s.name === 'TV')?.data     ?? []
   const mov = data.series.find(s => s.name === 'Movies')?.data ?? []
@@ -210,18 +245,18 @@ function ActivityTab({ sessions, streamCount }: { sessions: TautulliSession[]; s
         const stateColor = isPlaying ? '#2ecc71' : isPaused ? '#f39c12' : 'var(--accent-1)'
         const title    = s.media_type === 'episode' ? s.grandparent_title : s.title
         const subtitle = s.media_type === 'episode' ? s.title : s.player
-        const thumb    = s.grandparent_thumb || s.thumb
-        const thumbSrc = thumb ? tautulliThumbUrl(thumb, 80, 120) : undefined
+        const thumb = s.grandparent_thumb || s.thumb
 
         return (
           <div key={i} style={{
             display: 'flex', gap: 9, marginBottom: 12,
             paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)',
           }}>
-            {thumbSrc && (
-              <img src={thumbSrc} alt="" style={{
-                width: 38, height: 57, objectFit: 'cover', borderRadius: 4, flexShrink: 0,
-              }} />
+            {thumb && (
+              <ProxiedImage
+                target={tautulliThumbTarget(thumb, 80, 120)}
+                style={{ width: 38, height: 57, objectFit: 'cover', borderRadius: 4, flexShrink: 0, display: 'block' }}
+              />
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -381,7 +416,8 @@ function HistoryTab({ history, loading }: { history: TautulliHistoryItem[]; load
         const isFinished = item.watched_status === 1
         const title    = item.grandparent_title ? item.grandparent_title : item.title
         const subtitle = item.grandparent_title ? item.title : ''
-        const thumbSrc = item.thumb ? tautulliThumbUrl(item.thumb, 120, 180) : undefined
+        // For TV episodes prefer the series poster (grandparent_thumb); fall back to episode thumb
+        const bestThumb = item.grandparent_thumb || item.thumb || item.parent_thumb
         const name = item.friendly_name || item.user
         const userBg = avatarColor(name)
 
@@ -394,10 +430,14 @@ function HistoryTab({ history, loading }: { history: TautulliHistoryItem[]; load
           }}>
             {/* Thumb */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
-              {thumbSrc ? (
-                <img src={thumbSrc} alt="" style={{
-                  width: 38, height: 57, objectFit: 'cover', borderRadius: 4, display: 'block',
-                }} />
+              {bestThumb ? (
+                <ProxiedImage
+                  target={tautulliThumbTarget(bestThumb, 120, 180)}
+                  style={{ width: 38, height: 57, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                  fallback={
+                    <div style={{ width: 38, height: 57, borderRadius: 4, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', color: 'rgba(255,255,255,0.2)' }}>🎬</div>
+                  }
+                />
               ) : (
                 <div style={{
                   width: 38, height: 57, borderRadius: 4,
@@ -466,7 +506,7 @@ function StatCard({ stat }: { stat: TautulliStat }) {
   const rows = stat.rows.slice(0, 5)
   if (rows.length === 0) return null
   const top = rows[0]
-  const topThumb = top.thumb ? tautulliThumbUrl(top.thumb, 120, 180) : undefined
+  const topThumbPath = top.grandparent_thumb || top.thumb
   const colLabel = STAT_COL[stat.stat_id] ?? 'Plays'
 
   return (
@@ -484,10 +524,11 @@ function StatCard({ stat }: { stat: TautulliStat }) {
         <span>{colLabel}</span>
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
-        {topThumb && (
-          <img src={topThumb} alt="" style={{
-            width: 44, height: 66, objectFit: 'cover', borderRadius: 4, flexShrink: 0,
-          }} />
+        {topThumbPath && (
+          <ProxiedImage
+            target={tautulliThumbTarget(topThumbPath, 120, 180)}
+            style={{ width: 44, height: 66, objectFit: 'cover', borderRadius: 4, flexShrink: 0, display: 'block' }}
+          />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           {rows.map((row, i) => {
@@ -649,9 +690,10 @@ export default function TautulliTile() {
     fetchUsers, fetchHistory, fetchStats, fetchGraphs,
   } = useTautulli()
 
-  const [tab, setTab] = useState<Tab>('activity')
+  const [tab, setTab] = useState<Tab>('users')
   const [timeRange, setTimeRange] = useState(30)
-  const [fetchedTabs, setFetchedTabs] = useState<Set<string>>(new Set())
+  // users and stats are pre-fetched by the hook on mount
+  const [fetchedTabs, setFetchedTabs] = useState<Set<string>>(new Set(['users', 'stats']))
   const configured = isConfigured('tautulli')
 
   const activateTab = useCallback((t: Tab) => {
@@ -669,13 +711,6 @@ export default function TautulliTile() {
     fetchStats(v === 0 ? 36500 : v)
   }, [fetchStats])
 
-  // Prefetch stats on mount so they're ready when user clicks the tab
-  useEffect(() => {
-    if (configured && !fetchedTabs.has('stats')) {
-      setFetchedTabs(prev => new Set([...prev, 'stats']))
-      fetchStats(timeRange)
-    }
-  }, [configured]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabBtn = (t: Tab, label: string, badge?: number) => (
     <button

@@ -417,7 +417,7 @@ export default function SonarrTile() {
     fetchCredits, getServiceUrl,
   } = useSonarr()
 
-  const [tab, setTab] = useState<Tab>('queue')
+  const [tab, setTab] = useState<Tab>('upcoming')
   const [selectedSeries, setSelectedSeries] = useState<SonarrSeries | null>(null)
   const [libraryFetched, setLibraryFetched] = useState(false)
   const configured = isConfigured('sonarr')

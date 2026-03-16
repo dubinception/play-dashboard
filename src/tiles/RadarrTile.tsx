@@ -446,7 +446,7 @@ export default function RadarrTile() {
     fetchCredits, getServiceUrl,
   } = useRadarr()
 
-  const [tab, setTab] = useState<Tab>('queue')
+  const [tab, setTab] = useState<Tab>('upcoming')
   const [selectedMovie, setSelectedMovie] = useState<RadarrMovie | null>(null)
   const [libraryFetched, setLibraryFetched] = useState(false)
   const configured = isConfigured('radarr')

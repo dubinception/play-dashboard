@@ -40,6 +40,8 @@ export interface TautulliHistoryItem {
   year: number
   media_type: string
   thumb?: string
+  grandparent_thumb?: string
+  parent_thumb?: string
   date: number
   watched_status: number
   duration: number
@@ -52,6 +54,7 @@ export interface TautulliStatRow {
   friendly_name?: string
   user_thumb?: string
   thumb?: string
+  grandparent_thumb?: string
   total_plays: number
   total_duration: number
   users_watched?: number
@@ -86,9 +89,9 @@ export function tautulliApiUrl(cmd: string, extra = '') {
   return `${url}/api/v2?apikey=${encodeURIComponent(apiKey)}&cmd=${cmd}${extra}`
 }
 
-export function tautulliThumbUrl(thumb: string, w = 150, h = 225): string {
-  const target = tautulliApiUrl('pms_image_proxy', `&img=${encodeURIComponent(thumb)}&width=${w}&height=${h}`)
-  return `/api/proxy?url=${encodeURIComponent(target)}`
+// Returns the Tautulli API URL — pass this to proxyFetch or ProxiedImage (NOT for use as bare <img src>)
+export function tautulliThumbTarget(thumb: string, w = 150, h = 225): string {
+  return tautulliApiUrl('pms_image_proxy', `&img=${encodeURIComponent(thumb)}&width=${w}&height=${h}`)
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -219,10 +222,18 @@ export function useTautulli(): UseTautulliReturn {
 
   // ── Polling setup ──────────────────────────────────────────────────────────
 
+  const fetchUsersRef    = useRef(fetchUsers)
+  const fetchStatsRef    = useRef(fetchStats)
+  fetchUsersRef.current  = fetchUsers
+  fetchStatsRef.current  = fetchStats
+
   useEffect(() => {
     if (!configured) return
     setLoading(true)
     fetchActivity()
+    // Pre-load Users (default tab) and Stats immediately
+    fetchUsersRef.current()
+    fetchStatsRef.current(30)
     timerRef.current = setInterval(fetchActivity, POLL_INTERVAL)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [configured, fetchActivity])
