@@ -42,7 +42,34 @@ function StatusBadge({ color, label }: { color: string; label: string }) {
   )
 }
 
-// ── Poster card (for discovery / trending shelves) ────────────────────────────
+// ── Pill button ───────────────────────────────────────────────────────────────
+
+function Pill({
+  label, active, onClick, accent = false,
+}: {
+  label: string; active: boolean; onClick: () => void; accent?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '4px 11px', borderRadius: 20, border: 'none', flexShrink: 0,
+        background: active
+          ? (accent ? `${ACCENT}55` : ACCENT)
+          : 'rgba(255,255,255,0.08)',
+        color: active
+          ? (accent ? ACCENT : '#000')
+          : 'var(--text-muted)',
+        fontSize: '0.7rem', fontWeight: active ? 700 : 400,
+        cursor: 'pointer', fontFamily: 'inherit',
+        transition: 'background 0.15s, color 0.15s',
+      }}
+    >{label}</button>
+  )
+}
+
+// ── Poster card ───────────────────────────────────────────────────────────────
 
 function PosterCard({
   item, requestingId, onRequest,
@@ -52,21 +79,20 @@ function PosterCard({
   onRequest: (id: number, type: 'movie' | 'tv') => void
 }) {
   const [hovered, setHovered] = useState(false)
-  const src    = posterUrl(item.posterPath)
-  const title  = mediaTitle(item)
-  const year   = mediaYear(item)
-  const status = item.mediaInfo?.status
+  const src        = posterUrl(item.posterPath)
+  const title      = mediaTitle(item)
+  const year       = mediaYear(item)
+  const status     = item.mediaInfo?.status
   const statusInfo = status ? MEDIA_STATUS[status] : null
-  const isRequesting = requestingId === item.id
+  const isReq      = requestingId === item.id
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ flexShrink: 0, width: 88, cursor: 'pointer' }}
+      style={{ width: 86, cursor: 'pointer', flexShrink: 0 }}
     >
-      {/* Poster */}
-      <div style={{ position: 'relative', width: 88, height: 132, borderRadius: 6, overflow: 'hidden', marginBottom: 5 }}>
+      <div style={{ position: 'relative', width: 86, height: 128, borderRadius: 6, overflow: 'hidden', marginBottom: 4 }}>
         {src ? (
           <img src={src} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         ) : (
@@ -81,55 +107,51 @@ function PosterCard({
         {/* Hover overlay */}
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(0deg,rgba(0,0,0,0.85) 0%,rgba(0,0,0,0) 55%)',
-          opacity: hovered ? 1 : 0, transition: 'opacity 0.2s',
-          display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '6px',
+          background: 'linear-gradient(0deg,rgba(0,0,0,0.88) 0%,rgba(0,0,0,0) 55%)',
+          opacity: hovered ? 1 : 0, transition: 'opacity 0.18s',
+          display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: 5,
         }}>
           {statusInfo ? (
             <StatusBadge color={statusInfo.color} label={statusInfo.label} />
           ) : (
             <button
               onClick={(e) => { e.stopPropagation(); onRequest(item.id, item.mediaType) }}
-              disabled={isRequesting}
+              disabled={isReq}
               style={{
                 padding: '4px 0', borderRadius: 5, border: 'none',
-                background: isRequesting ? 'rgba(229,160,13,0.5)' : ACCENT,
-                color: '#000', fontSize: '0.68rem', fontWeight: 700,
-                cursor: isRequesting ? 'wait' : 'pointer', fontFamily: 'inherit',
-                width: '100%',
+                background: isReq ? 'rgba(229,160,13,0.5)' : ACCENT,
+                color: '#000', fontSize: '0.67rem', fontWeight: 700,
+                cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit', width: '100%',
               }}
-            >{isRequesting ? '…' : '+ Request'}</button>
+            >{isReq ? '…' : '+ Request'}</button>
           )}
         </div>
 
-        {/* Status dot (always visible) */}
+        {/* Always-visible status dot */}
         {statusInfo && !hovered && (
           <div style={{
             position: 'absolute', top: 5, right: 5,
-            width: 8, height: 8, borderRadius: '50%',
-            background: statusInfo.color,
-            boxShadow: `0 0 6px ${statusInfo.color}`,
+            width: 7, height: 7, borderRadius: '50%',
+            background: statusInfo.color, boxShadow: `0 0 6px ${statusInfo.color}`,
           }} />
         )}
       </div>
 
-      {/* Title */}
       <div style={{
-        fontSize: '0.68rem', color: 'var(--text-secondary)',
-        lineHeight: 1.3, overflow: 'hidden',
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+        fontSize: '0.66rem', color: 'var(--text-secondary)', lineHeight: 1.3,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>{title}</div>
-      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 1 }}>
-        {year}{year && item.mediaType ? ' · ' : ''}{item.mediaType === 'tv' ? 'TV' : item.mediaType === 'movie' ? 'Movie' : ''}
-        {item.voteAverage && item.voteAverage > 0 ? ` · ★${item.voteAverage.toFixed(1)}` : ''}
+      <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 1 }}>
+        {year}{year && item.voteAverage && item.voteAverage > 0 ? ' · ' : ''}
+        {item.voteAverage && item.voteAverage > 0 ? `★${item.voteAverage.toFixed(1)}` : ''}
       </div>
     </div>
   )
 }
 
-// ── Horizontal poster shelf ───────────────────────────────────────────────────
+// ── Poster grid (wraps to fill available height) ──────────────────────────────
 
-function PosterShelf({
+function PosterGrid({
   items, requestingId, onRequest, loading, emptyMsg = 'No results',
 }: {
   items: OverseerrResult[]
@@ -138,14 +160,18 @@ function PosterShelf({
   loading?: boolean
   emptyMsg?: string
 }) {
+  const gridStyle: React.CSSProperties = {
+    display: 'flex', flexWrap: 'wrap', gap: 8, alignContent: 'flex-start',
+  }
+
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'hidden' }}>
-      {Array.from({ length: 5 }).map((_, i) => (
+    <div style={gridStyle}>
+      {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} style={{
-          flexShrink: 0, width: 88, height: 132, borderRadius: 6,
+          width: 86, height: 128, borderRadius: 6,
           background: 'rgba(255,255,255,0.05)',
           animation: 'pulse 1.5s ease-in-out infinite',
-          animationDelay: `${i * 0.1}s`,
+          animationDelay: `${i * 0.07}s`,
         }} />
       ))}
     </div>
@@ -156,7 +182,7 @@ function PosterShelf({
   )
 
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+    <div style={gridStyle}>
       {items.map(item => (
         <PosterCard
           key={`${item.mediaType}-${item.id}`}
@@ -171,11 +197,7 @@ function PosterShelf({
 
 // ── Requests tab ──────────────────────────────────────────────────────────────
 
-function RequestsTab({
-  requests,
-}: {
-  requests: OverseerrRequest[]
-}) {
+function RequestsTab({ requests }: { requests: OverseerrRequest[] }) {
   if (requests.length === 0) return (
     <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center', paddingTop: 20 }}>
       No recent requests
@@ -197,20 +219,15 @@ function RequestsTab({
             display: 'flex', alignItems: 'center', gap: 9,
             padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
           }}>
-            {/* Poster or fallback */}
             {src ? (
-              <img src={src} alt="" style={{
-                width: 36, height: 54, objectFit: 'cover', borderRadius: 4, flexShrink: 0, display: 'block',
-              }} />
+              <img src={src} alt="" style={{ width: 36, height: 54, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
             ) : (
               <div style={{
                 width: 36, height: 54, borderRadius: 4, flexShrink: 0,
                 background: 'rgba(229,160,13,0.1)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.1rem',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem',
               }}>{req.type === 'movie' ? '🎬' : '📺'}</div>
             )}
-
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-secondary)',
@@ -220,7 +237,6 @@ function RequestsTab({
                 {name} · {reqDate(req.createdAt)}
               </div>
             </div>
-
             <StatusBadge color={statusInfo.color} label={statusInfo.label} />
           </div>
         )
@@ -229,7 +245,7 @@ function RequestsTab({
   )
 }
 
-// ── Search results (replaces tab content when searching) ──────────────────────
+// ── Search results ────────────────────────────────────────────────────────────
 
 function SearchResults({
   results, searching, requestingId, onRequest,
@@ -249,11 +265,11 @@ function SearchResults({
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {results.map(r => {
-        const status = r.mediaInfo?.status
+        const status     = r.mediaInfo?.status
         const statusInfo = status ? MEDIA_STATUS[status] : null
-        const src  = posterUrl(r.posterPath)
-        const year = mediaYear(r)
-        const isRequesting = requestingId === r.id
+        const src        = posterUrl(r.posterPath)
+        const year       = mediaYear(r)
+        const isReq      = requestingId === r.id
 
         return (
           <div key={`${r.mediaType}-${r.id}`} style={{
@@ -261,7 +277,7 @@ function SearchResults({
             padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
           }}>
             {src ? (
-              <img src={src} alt="" style={{ width: 36, height: 54, objectFit: 'cover', borderRadius: 4, flexShrink: 0, display: 'block' }} />
+              <img src={src} alt="" style={{ width: 36, height: 54, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
             ) : (
               <div style={{
                 width: 36, height: 54, borderRadius: 4, flexShrink: 0,
@@ -284,15 +300,15 @@ function SearchResults({
             ) : (
               <button
                 onClick={() => onRequest(r.id, r.mediaType)}
-                disabled={isRequesting}
+                disabled={isReq}
                 style={{
                   padding: '4px 10px', borderRadius: 6,
                   border: `1px solid ${ACCENT}88`,
-                  background: isRequesting ? `${ACCENT}22` : 'transparent',
+                  background: isReq ? `${ACCENT}22` : 'transparent',
                   color: ACCENT, fontSize: '0.7rem',
-                  cursor: isRequesting ? 'wait' : 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                  cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit', flexShrink: 0,
                 }}
-              >{isRequesting ? '…' : '+ Request'}</button>
+              >{isReq ? '…' : '+ Request'}</button>
             )}
           </div>
         )
@@ -303,18 +319,18 @@ function SearchResults({
 
 // ── Discover tab ──────────────────────────────────────────────────────────────
 
-const DISCOVER_MODES: { value: DiscoverMode | 'divider'; label: string }[] = [
+const MODES: { value: DiscoverMode; label: string }[] = [
   { value: 'trending',    label: '🔥 Trending' },
-  { value: 'movies',      label: '🎬 Popular Movies' },
-  { value: 'tv',          label: '📺 Popular TV' },
-  { value: 'movie_genre', label: '🎭 Movies by Genre' },
-  { value: 'tv_genre',    label: '🎭 TV by Genre' },
-  { value: 'tv_network',  label: '📡 TV by Network' },
+  { value: 'movies',      label: '🎬 Movies' },
+  { value: 'tv',          label: '📺 TV' },
+  { value: 'movie_genre', label: '🎭 Movie Genre' },
+  { value: 'tv_genre',    label: '📺 TV Genre' },
+  { value: 'tv_network',  label: '📡 Network' },
 ]
 
 function DiscoverTab({
   results, discoverLoading, movieGenres, tvGenres, networks,
-  requestingId, onRequest, onDiscover, onFetchMetadata,
+  requestingId, onRequest, onDiscover,
 }: {
   results: OverseerrResult[]
   discoverLoading: boolean
@@ -324,100 +340,99 @@ function DiscoverTab({
   requestingId: number | null
   onRequest: (id: number, type: 'movie' | 'tv') => void
   onDiscover: (mode: DiscoverMode, id?: number) => void
-  onFetchMetadata: () => Promise<void>
 }) {
-  const [mode, setMode] = useState<DiscoverMode>('trending')
-  const [genreId, setGenreId]     = useState<number>(0)
-  const [networkId, setNetworkId] = useState<number>(0)
-  const [metaFetched, setMetaFetched] = useState(false)
+  const [mode, setMode]         = useState<DiscoverMode>('trending')
+  const [genreId, setGenreId]   = useState(0)
+  const [networkId, setNetworkId] = useState(0)
 
   const needsGenre   = mode === 'movie_genre' || mode === 'tv_genre'
   const needsNetwork = mode === 'tv_network'
   const genreList    = mode === 'movie_genre' ? movieGenres : tvGenres
 
-  // Fetch on mode change
+  // Fire discover when mode changes (for non-filtered modes)
   useEffect(() => {
-    if (needsGenre) {
-      if (!metaFetched) { onFetchMetadata(); setMetaFetched(true) }
-      if (genreId) onDiscover(mode, genreId)
-    } else if (needsNetwork) {
-      if (!metaFetched) { onFetchMetadata(); setMetaFetched(true) }
-      if (networkId) onDiscover(mode, networkId)
-    } else {
+    if (!needsGenre && !needsNetwork) {
       onDiscover(mode)
     }
+    // reset sub-selections when mode changes
+    setGenreId(0)
+    setNetworkId(0)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
-  const handleGenreChange = (id: number) => {
+  const handleMode = (m: DiscoverMode) => setMode(m)
+
+  const handleGenre = (id: number) => {
     setGenreId(id)
     if (id) onDiscover(mode, id)
   }
 
-  const handleNetworkChange = (id: number) => {
+  const handleNetwork = (id: number) => {
     setNetworkId(id)
     if (id) onDiscover(mode, id)
   }
 
-  const selectStyle: React.CSSProperties = {
-    padding: '5px 8px', borderRadius: 6, fontSize: '0.73rem',
-    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-    color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer',
-    maxWidth: '100%',
-  }
+  const subPillStyle = (active: boolean): React.CSSProperties => ({
+    padding: '3px 9px', borderRadius: 20, border: 'none', flexShrink: 0,
+    background: active ? `${ACCENT}40` : 'rgba(255,255,255,0.05)',
+    color: active ? ACCENT : 'var(--text-muted)',
+    fontSize: '0.65rem', fontWeight: active ? 600 : 400,
+    cursor: 'pointer', fontFamily: 'inherit',
+    transition: 'background 0.15s',
+  })
+
+  const showGrid = (!needsGenre || genreId > 0) && (!needsNetwork || networkId > 0)
+  const emptyHint = needsGenre
+    ? (genreList.length ? 'Pick a genre above' : 'Loading genres…')
+    : (networks.length ? 'Pick a network above' : 'Loading networks…')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 8 }}>
-      {/* Mode selector */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
-        <select
-          value={mode}
-          onChange={e => setMode(e.target.value as DiscoverMode)}
-          style={selectStyle}
-        >
-          {DISCOVER_MODES.map(m => (
-            <option key={m.value} value={m.value}>{m.label}</option>
-          ))}
-        </select>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 7 }}>
 
-        {/* Genre selector */}
-        {needsGenre && (
-          <select
-            value={genreId}
-            onChange={e => handleGenreChange(Number(e.target.value))}
-            style={selectStyle}
-          >
-            <option value={0}>— Pick a genre —</option>
-            {genreList.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-        )}
-
-        {/* Network selector */}
-        {needsNetwork && (
-          <select
-            value={networkId}
-            onChange={e => handleNetworkChange(Number(e.target.value))}
-            style={selectStyle}
-          >
-            <option value={0}>— Pick a network —</option>
-            {networks.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-          </select>
-        )}
+      {/* Mode pills */}
+      <div style={{ display: 'flex', gap: 5, overflowX: 'auto', flexShrink: 0, paddingBottom: 1 }}>
+        {MODES.map(m => (
+          <Pill key={m.value} label={m.label} active={mode === m.value} onClick={() => handleMode(m.value)} />
+        ))}
       </div>
 
-      {/* Results shelf */}
+      {/* Genre sub-pills */}
+      {needsGenre && (
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0, paddingBottom: 1 }}>
+          {genreList.length === 0 ? (
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Loading genres…</span>
+          ) : genreList.map(g => (
+            <button key={g.id} onClick={() => handleGenre(g.id)} style={subPillStyle(genreId === g.id)}>
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Network sub-pills */}
+      {needsNetwork && (
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0, paddingBottom: 1 }}>
+          {networks.length === 0 ? (
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Loading networks…</span>
+          ) : networks.map(n => (
+            <button key={n.id} onClick={() => handleNetwork(n.id)} style={subPillStyle(networkId === n.id)}>
+              {n.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Poster grid — fills remaining space */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {(needsGenre && !genreId) || (needsNetwork && !networkId) ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingTop: 8 }}>
-            {needsGenre ? 'Select a genre above' : 'Select a network above'}
-          </div>
-        ) : (
-          <PosterShelf
+        {showGrid ? (
+          <PosterGrid
             items={results}
             requestingId={requestingId}
             onRequest={onRequest}
             loading={discoverLoading}
           />
+        ) : (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingTop: 4 }}>{emptyHint}</div>
         )}
       </div>
     </div>
@@ -426,7 +441,7 @@ function DiscoverTab({
 
 // ── Main tile ─────────────────────────────────────────────────────────────────
 
-type Tab = 'requests' | 'trending' | 'discover'
+type Tab = 'discover' | 'requests'
 
 export default function OverseerrTile() {
   const { isConfigured } = useConfigStore()
@@ -434,38 +449,24 @@ export default function OverseerrTile() {
     results, requests, discoverResults,
     movieGenres, tvGenres, networks,
     searching, discoverLoading, requestingId, error,
-    search, clearResults, discover, fetchMetadata, requestMedia,
+    search, clearResults, discover, requestMedia,
   } = useOverseerr()
 
-  const [query, setQuery]   = useState('')
-  const [tab, setTab]       = useState<Tab>('requests')
-  const [trendingFetched, setTrendingFetched] = useState(false)
-  const configured = isConfigured('overseerr')
-  const isSearching = query.trim().length > 0
+  const [query, setQuery] = useState('')
+  const [tab, setTab]     = useState<Tab>('discover')
+  const configured        = isConfigured('overseerr')
+  const isSearching       = query.trim().length > 0
 
-  // Auto-load trending when that tab is first opened
-  const activateTrending = useCallback(() => {
-    if (!trendingFetched) {
-      discover('trending')
-      setTrendingFetched(true)
-    }
-  }, [trendingFetched, discover])
-
-  const handleTabChange = useCallback((t: Tab) => {
-    setTab(t)
-    if (t === 'trending') activateTrending()
-  }, [activateTrending])
-
-  const handleSearch = (val: string) => {
+  const handleSearch = useCallback((val: string) => {
     setQuery(val)
     search(val)
     if (!val) clearResults()
-  }
+  }, [search, clearResults])
 
   const tabBtn = (t: Tab, label: string, badge?: number) => (
     <button
       type="button"
-      onClick={() => handleTabChange(t)}
+      onClick={() => setTab(t)}
       style={{
         flex: 1, padding: '5px 2px', borderRadius: 6, border: 'none',
         background: tab === t ? `rgba(229,160,13,0.12)` : 'transparent',
@@ -473,7 +474,7 @@ export default function OverseerrTile() {
         fontSize: '0.72rem', fontWeight: tab === t ? 600 : 400,
         cursor: 'pointer', fontFamily: 'inherit',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-        transition: 'background 0.15s, color 0.15s', whiteSpace: 'nowrap',
+        transition: 'background 0.15s, color 0.15s',
       }}
     >
       {label}
@@ -539,7 +540,6 @@ export default function OverseerrTile() {
             <span style={{ fontSize: '0.72rem' }}>{error}</span>
           </div>
         ) : isSearching ? (
-          /* Search results overlay */
           <SearchResults
             results={results}
             searching={searching}
@@ -550,29 +550,12 @@ export default function OverseerrTile() {
           <>
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 2, marginBottom: 10, flexShrink: 0 }}>
-              {tabBtn('requests', 'Requests', requests.length || undefined)}
-              {tabBtn('trending', 'Trending')}
               {tabBtn('discover', 'Discover')}
+              {tabBtn('requests', 'Requests', requests.length || undefined)}
             </div>
 
             {/* Tab content */}
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              {tab === 'requests' && (
-                <RequestsTab
-                  requests={requests}
-                />
-              )}
-              {tab === 'trending' && (
-                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                  <PosterShelf
-                    items={discoverResults}
-                    requestingId={requestingId}
-                    onRequest={requestMedia}
-                    loading={discoverLoading}
-                    emptyMsg="Loading trending…"
-                  />
-                </div>
-              )}
               {tab === 'discover' && (
                 <DiscoverTab
                   results={discoverResults}
@@ -583,8 +566,10 @@ export default function OverseerrTile() {
                   requestingId={requestingId}
                   onRequest={requestMedia}
                   onDiscover={discover}
-                  onFetchMetadata={fetchMetadata}
                 />
+              )}
+              {tab === 'requests' && (
+                <RequestsTab requests={requests} />
               )}
             </div>
           </>

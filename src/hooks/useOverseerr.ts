@@ -158,9 +158,12 @@ export function useOverseerr(): UseOverseerrReturn {
     }
   }, [])
 
+  const fetchMetadataRef = useRef<() => Promise<void>>(() => Promise.resolve())
+
   useEffect(() => {
     if (!configured) return
     fetchRequests()
+    fetchMetadataRef.current()
     const t = setInterval(fetchRequests, POLL_INTERVAL)
     return () => clearInterval(t)
   }, [configured, fetchRequests])
@@ -218,20 +221,46 @@ export function useOverseerr(): UseOverseerrReturn {
 
   // ── Metadata (genres + networks) ───────────────────────────────────────────
 
+  // Popular TV networks (TMDb IDs) — shown if the API endpoint returns nothing
+  const FALLBACK_NETWORKS: OverseerrNetwork[] = [
+    { id: 213, name: 'Netflix' }, { id: 1024, name: 'Prime Video' },
+    { id: 2739, name: 'Disney+' }, { id: 49, name: 'HBO' },
+    { id: 359, name: 'Hulu' }, { id: 2087, name: 'Apple TV+' },
+    { id: 174, name: 'AMC' }, { id: 453, name: 'FX' },
+    { id: 19, name: 'Fox' }, { id: 6, name: 'NBC' },
+    { id: 2, name: 'ABC' }, { id: 4, name: 'CBS' },
+    { id: 77, name: 'Showtime' }, { id: 318, name: 'Starz' },
+    { id: 56, name: 'TNT' }, { id: 34, name: 'Syfy' },
+    { id: 71, name: 'CW' }, { id: 16, name: 'Comedy Central' },
+    { id: 23, name: 'Cartoon Network' }, { id: 251, name: 'USA Network' },
+  ]
+
   const fetchMetadata = useCallback(async () => {
     if (!isOverseerrConfigured()) return
     try {
-      const [mgRes, tgRes, nwRes] = await Promise.all([
+      const [mgRes, tgRes] = await Promise.all([
         proxyFetch(overseerrUrl('/api/v1/genre/movie'), overseerrHeaders()),
         proxyFetch(overseerrUrl('/api/v1/genre/tv'), overseerrHeaders()),
-        proxyFetch(overseerrUrl('/api/v1/network'), overseerrHeaders()),
       ])
-      const [mg, tg, nw] = await Promise.all([mgRes.json(), tgRes.json(), nwRes.json()])
-      if (Array.isArray(mg)) setMovieGenres(mg)
-      if (Array.isArray(tg)) setTvGenres(tg)
-      if (Array.isArray(nw)) setNetworks(nw.slice(0, 60))
+      const [mg, tg] = await Promise.all([mgRes.json(), tgRes.json()])
+      const toArr = (d: unknown) => Array.isArray(d) ? d : (d as any)?.results ?? []
+      const mgArr = toArr(mg); const tgArr = toArr(tg)
+      if (mgArr.length) setMovieGenres(mgArr)
+      if (tgArr.length) setTvGenres(tgArr)
     } catch { /* non-critical */ }
+
+    // Networks: try API, fall back to curated list
+    try {
+      const nwRes = await proxyFetch(overseerrUrl('/api/v1/network'), overseerrHeaders())
+      const nw = await nwRes.json()
+      const arr = Array.isArray(nw) ? nw : (nw?.results ?? [])
+      setNetworks(arr.length ? arr.slice(0, 40) : FALLBACK_NETWORKS)
+    } catch {
+      setNetworks(FALLBACK_NETWORKS)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  fetchMetadataRef.current = fetchMetadata
 
   // ── Request media ──────────────────────────────────────────────────────────
 
