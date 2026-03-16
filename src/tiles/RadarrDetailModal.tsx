@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { RadarrMovie, RadarrQualityProfile, RadarrCredit } from '@/hooks/useRadarr'
 import { radarrImageUrl } from '@/hooks/useRadarr'
 
@@ -230,7 +231,7 @@ export default function RadarrDetailModal({
     onClose()
   }
 
-  return (
+  return createPortal(
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       style={{
@@ -566,6 +567,7 @@ export default function RadarrDetailModal({
 
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

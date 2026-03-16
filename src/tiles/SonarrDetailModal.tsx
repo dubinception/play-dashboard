@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { SonarrSeries, SonarrQualityProfile, SonarrCredit, SonarrSeason } from '@/hooks/useSonarr'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -245,7 +246,7 @@ export default function SonarrDetailModal({
 
   const ACCENT = '#35c5f4'
 
-  return (
+  return createPortal(
     <div
       onClick={onClose}
       style={{
@@ -556,6 +557,7 @@ export default function SonarrDetailModal({
           }}>{toast}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

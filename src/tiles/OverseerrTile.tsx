@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import TileWrapper from '@/components/TileWrapper'
 import { useOverseerr, MEDIA_STATUS, REQUEST_STATUS } from '@/hooks/useOverseerr'
 import useConfigStore from '@/store/useConfigStore'
@@ -69,14 +70,154 @@ function Pill({
   )
 }
 
-// ── Poster card ───────────────────────────────────────────────────────────────
+// ── Detail modal ──────────────────────────────────────────────────────────────
 
-function PosterCard({
-  item, requestingId, onRequest,
+function OverseerrDetailModal({
+  item, requestingId, onRequest, onClose,
 }: {
   item: OverseerrResult
   requestingId: number | null
   onRequest: (id: number, type: 'movie' | 'tv') => void
+  onClose: () => void
+}) {
+  const title      = mediaTitle(item)
+  const year       = mediaYear(item)
+  const src        = item.posterPath ? `https://image.tmdb.org/t/p/w342${item.posterPath}` : undefined
+  const status     = item.mediaInfo?.status
+  const statusInfo = status ? MEDIA_STATUS[status] : null
+  const isReq      = requestingId === item.id
+  const typeLabel  = item.mediaType === 'movie' ? 'Movie' : 'TV Series'
+
+  // ESC to close + body scroll lock
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
+  }, [onClose])
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 560,
+          borderRadius: 14, overflow: 'hidden',
+          background: 'var(--bg-card)',
+          border: `1px solid ${ACCENT}30`,
+          boxShadow: `0 0 60px ${ACCENT}18, 0 24px 60px rgba(0,0,0,0.7)`,
+          display: 'flex', flexDirection: 'column',
+          position: 'relative',
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 10, right: 10, zIndex: 2,
+            width: 30, height: 30, borderRadius: '50%', border: 'none',
+            background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '1rem',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >×</button>
+
+        {/* Body */}
+        <div style={{ display: 'flex', gap: 0 }}>
+
+          {/* Poster */}
+          <div style={{ width: 160, flexShrink: 0 }}>
+            {src ? (
+              <img src={src} alt={title} style={{ width: '100%', height: 240, objectFit: 'cover', display: 'block' }} />
+            ) : (
+              <div style={{
+                width: '100%', height: 240,
+                background: `linear-gradient(135deg,${ACCENT}18,rgba(0,0,0,0.3))`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '3rem', color: 'rgba(255,255,255,0.15)',
+              }}>
+                {item.mediaType === 'movie' ? '🎬' : '📺'}
+              </div>
+            )}
+          </div>
+
+          {/* Info */}
+          <div style={{ flex: 1, padding: '16px 16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+
+            {/* Type + year */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                background: `${ACCENT}20`, border: `1px solid ${ACCENT}44`, color: ACCENT,
+              }}>{typeLabel}</span>
+              {year && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{year}</span>}
+              {item.voteAverage && item.voteAverage > 0 ? (
+                <span style={{ fontSize: '0.7rem', color: '#ffc230', marginLeft: 'auto' }}>★ {item.voteAverage.toFixed(1)}</span>
+              ) : null}
+            </div>
+
+            {/* Title */}
+            <div style={{
+              fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3,
+            }}>{title}</div>
+
+            {/* Status */}
+            {statusInfo && <StatusBadge color={statusInfo.color} label={statusInfo.label} />}
+
+            {/* Overview */}
+            {item.overview && (
+              <p style={{
+                fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.6,
+                margin: 0, flex: 1,
+                display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }}>{item.overview}</p>
+            )}
+
+            {/* Action */}
+            <div style={{ marginTop: 'auto', paddingTop: 6 }}>
+              {statusInfo ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusInfo.color, boxShadow: `0 0 6px ${statusInfo.color}`, display: 'inline-block' }} />
+                  <span style={{ fontSize: '0.78rem', color: statusInfo.color, fontWeight: 600 }}>{statusInfo.label}</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { onRequest(item.id, item.mediaType); onClose() }}
+                  disabled={isReq}
+                  style={{
+                    padding: '8px 20px', borderRadius: 8, border: 'none',
+                    background: isReq ? `${ACCENT}44` : ACCENT,
+                    color: '#000', fontSize: '0.8rem', fontWeight: 700,
+                    cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit',
+                    width: '100%',
+                  }}
+                >{isReq ? 'Requesting…' : '+ Request'}</button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Poster card ───────────────────────────────────────────────────────────────
+
+function PosterCard({
+  item, requestingId, onSelect,
+}: {
+  item: OverseerrResult
+  requestingId: number | null
+  onSelect: (item: OverseerrResult) => void
 }) {
   const [hovered, setHovered] = useState(false)
   const src        = posterUrl(item.posterPath)
@@ -90,6 +231,7 @@ function PosterCard({
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={() => onSelect(item)}
       style={{ width: 86, cursor: 'pointer', flexShrink: 0 }}
     >
       <div style={{ position: 'relative', width: 86, height: 128, borderRadius: 6, overflow: 'hidden', marginBottom: 4 }}>
@@ -114,16 +256,12 @@ function PosterCard({
           {statusInfo ? (
             <StatusBadge color={statusInfo.color} label={statusInfo.label} />
           ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRequest(item.id, item.mediaType) }}
-              disabled={isReq}
-              style={{
-                padding: '4px 0', borderRadius: 5, border: 'none',
-                background: isReq ? 'rgba(229,160,13,0.5)' : ACCENT,
-                color: '#000', fontSize: '0.67rem', fontWeight: 700,
-                cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit', width: '100%',
-              }}
-            >{isReq ? '…' : '+ Request'}</button>
+            <div style={{
+              padding: '3px 0', borderRadius: 5,
+              background: `${ACCENT}cc`,
+              color: '#000', fontSize: '0.63rem', fontWeight: 700,
+              textAlign: 'center', width: '100%',
+            }}>{isReq ? '…' : '+ Request'}</div>
           )}
         </div>
 
@@ -152,11 +290,11 @@ function PosterCard({
 // ── Poster grid (wraps to fill available height) ──────────────────────────────
 
 function PosterGrid({
-  items, requestingId, onRequest, loading, emptyMsg = 'No results',
+  items, requestingId, onSelect, loading, emptyMsg = 'No results',
 }: {
   items: OverseerrResult[]
   requestingId: number | null
-  onRequest: (id: number, type: 'movie' | 'tv') => void
+  onSelect: (item: OverseerrResult) => void
   loading?: boolean
   emptyMsg?: string
 }) {
@@ -188,7 +326,7 @@ function PosterGrid({
           key={`${item.mediaType}-${item.id}`}
           item={item}
           requestingId={requestingId}
-          onRequest={onRequest}
+          onSelect={onSelect}
         />
       ))}
     </div>
@@ -248,12 +386,12 @@ function RequestsTab({ requests }: { requests: OverseerrRequest[] }) {
 // ── Search results ────────────────────────────────────────────────────────────
 
 function SearchResults({
-  results, searching, requestingId, onRequest,
+  results, searching, requestingId, onSelect,
 }: {
   results: OverseerrResult[]
   searching: boolean
   requestingId: number | null
-  onRequest: (id: number, type: 'movie' | 'tv') => void
+  onSelect: (item: OverseerrResult) => void
 }) {
   if (searching) return (
     <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', paddingTop: 8 }}>Searching…</div>
@@ -272,10 +410,15 @@ function SearchResults({
         const isReq      = requestingId === r.id
 
         return (
-          <div key={`${r.mediaType}-${r.id}`} style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
-          }}>
+          <div
+            key={`${r.mediaType}-${r.id}`}
+            onClick={() => onSelect(r)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+              cursor: 'pointer',
+            }}
+          >
             {src ? (
               <img src={src} alt="" style={{ width: 36, height: 54, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
             ) : (
@@ -299,7 +442,7 @@ function SearchResults({
               <StatusBadge color={statusInfo.color} label={statusInfo.label} />
             ) : (
               <button
-                onClick={() => onRequest(r.id, r.mediaType)}
+                onClick={(e) => { e.stopPropagation(); onSelect(r) }}
                 disabled={isReq}
                 style={{
                   padding: '4px 10px', borderRadius: 6,
@@ -331,7 +474,7 @@ const MODES: { value: DiscoverMode; label: string }[] = [
 function DiscoverTab({
   results, discoverLoading, discoverPage, discoverTotalPages,
   movieGenres, tvGenres, networks,
-  requestingId, onRequest, onDiscover,
+  requestingId, onSelect, onDiscover,
 }: {
   results: OverseerrResult[]
   discoverLoading: boolean
@@ -341,7 +484,7 @@ function DiscoverTab({
   tvGenres: { id: number; name: string }[]
   networks: { id: number; name: string }[]
   requestingId: number | null
-  onRequest: (id: number, type: 'movie' | 'tv') => void
+  onSelect: (item: OverseerrResult) => void
   onDiscover: (mode: DiscoverMode, id?: number, page?: number) => void
 }) {
   const [mode, setMode]           = useState<DiscoverMode>('trending')
@@ -450,7 +593,7 @@ function DiscoverTab({
             <PosterGrid
               items={results}
               requestingId={requestingId}
-              onRequest={onRequest}
+              onSelect={onSelect}
               loading={discoverLoading && discoverPage === 1}
             />
             {/* Manual load-more fallback (shown only if auto-fill stopped due to scroll) */}
@@ -499,9 +642,10 @@ export default function OverseerrTile() {
     search, clearResults, discover, requestMedia,
   } = useOverseerr()
 
-  const [query, setQuery] = useState('')
-  const [tab, setTab]     = useState<Tab>('discover')
-  const configured        = isConfigured('overseerr')
+  const [query, setQuery]             = useState('')
+  const [tab, setTab]                 = useState<Tab>('discover')
+  const [selectedItem, setSelectedItem] = useState<OverseerrResult | null>(null)
+  const configured                    = isConfigured('overseerr')
   const isSearching       = query.trim().length > 0
 
   const handleSearch = useCallback((val: string) => {
@@ -535,6 +679,15 @@ export default function OverseerrTile() {
   )
 
   return (
+    <>
+    {selectedItem && (
+      <OverseerrDetailModal
+        item={selectedItem}
+        requestingId={requestingId}
+        onRequest={requestMedia}
+        onClose={() => setSelectedItem(null)}
+      />
+    )}
     <TileWrapper
       id="overseerr"
       label="Overseerr"
@@ -591,7 +744,7 @@ export default function OverseerrTile() {
             results={results}
             searching={searching}
             requestingId={requestingId}
-            onRequest={requestMedia}
+            onSelect={setSelectedItem}
           />
         ) : (
           <>
@@ -613,7 +766,7 @@ export default function OverseerrTile() {
                   tvGenres={tvGenres}
                   networks={networks}
                   requestingId={requestingId}
-                  onRequest={requestMedia}
+                  onSelect={setSelectedItem}
                   onDiscover={discover}
                 />
               )}
@@ -625,5 +778,6 @@ export default function OverseerrTile() {
         )}
       </div>
     </TileWrapper>
+    </>
   )
 }
