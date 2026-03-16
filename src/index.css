@@ -38,9 +38,9 @@
   --border-bright:  #0055cc;
 
   /* Text */
-  --text-primary:   #e0f0ff;
-  --text-secondary: #7aa0c8;
-  --text-muted:     #344d6e;
+  --text-primary:   #eef6ff;
+  --text-secondary: #b0cce8;
+  --text-muted:     #7090b0;
 
   /* Gradients */
   --gradient-hero:  linear-gradient(160deg, #050810 0%, #080f20 60%, #050d1a 100%);
@@ -106,9 +106,9 @@ html[data-theme="abyss"][data-mode="dark"] {
   --bg-card-hover:  #21163c;
   --border:         #281840;
   --border-bright:  #6615cc;
-  --text-primary:   #f0e8ff;
-  --text-secondary: #a880cc;
-  --text-muted:     #4a2a6a;
+  --text-primary:   #f5eeff;
+  --text-secondary: #caa8e8;
+  --text-muted:     #9068b8;
   --gradient-hero:  linear-gradient(160deg, #090813 0%, #110d20 60%, #0c0a1a 100%);
 }
 
@@ -143,9 +143,9 @@ html[data-theme="inferno"][data-mode="dark"] {
   --bg-card-hover:  #2e1400;
   --border:         #3d1808;
   --border-bright:  #cc2000;
-  --text-primary:   #fff0e8;
-  --text-secondary: #cc9070;
-  --text-muted:     #6e3020;
+  --text-primary:   #fff5f0;
+  --text-secondary: #e8b898;
+  --text-muted:     #b07858;
   --gradient-hero:  linear-gradient(160deg, #0f0804 0%, #180c06 60%, #120a04 100%);
 }
 
@@ -180,9 +180,9 @@ html[data-theme="reactor"][data-mode="dark"] {
   --bg-card-hover:  #201c00;
   --border:         #2a2600;
   --border-bright:  #aaaa00;
-  --text-primary:   #fffff0;
-  --text-secondary: #ccb840;
-  --text-muted:     #6e5c10;
+  --text-primary:   #fffff5;
+  --text-secondary: #e0d060;
+  --text-muted:     #a89030;
   --gradient-hero:  linear-gradient(160deg, #0a0900 0%, #100f00 60%, #0d0c00 100%);
 }
 
