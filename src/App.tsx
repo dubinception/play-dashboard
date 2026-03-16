@@ -7,26 +7,42 @@ import Dashboard from '@/pages/Dashboard'
 import Settings from '@/pages/Settings'
 import useTileStore from '@/store/useTileStore'
 import useConfigStore from '@/store/useConfigStore'
+import { useThemeStore } from '@/store/useThemeStore'
 
 export default function App() {
   const { editMode, sidebarCollapsed } = useTileStore()
   const loadFromKV = useConfigStore((s) => s.loadFromKV)
+  const { theme, mode, glowSpeed, glowIntensity } = useThemeStore()
 
   useEffect(() => {
     loadFromKV()
   }, [])
+
+  // Sync theme settings → html data attributes (CSS selectors pick these up)
+  useEffect(() => {
+    const h = document.documentElement
+    h.dataset.theme         = theme
+    h.dataset.mode          = mode
+    h.dataset.glowSpeed     = glowSpeed
+    h.dataset.glowIntensity = glowIntensity
+  }, [theme, mode, glowSpeed, glowIntensity])
+
   const sidebarWidth = sidebarCollapsed ? 60 : 220
 
   return (
     <BrowserRouter>
-      {/* Background layers */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: 'var(--bg-base)' }} />
-      <div className="glow-ambient" />
-      <div className="glow-bottom" />
-      <div className="glow-teal" />
-      <div className="glow-topleft" />
-      <div className="glow-topright" />
-      <div className="dot-grid" />
+      {/* Base background (behind glow layers) */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: 'var(--bg-base)', transition: 'background 0.4s ease' }} />
+
+      {/* Glow + dot grid — wrapped so intensity can be controlled via CSS opacity */}
+      <div id="glow-root">
+        <div className="glow-ambient" />
+        <div className="glow-bottom" />
+        <div className="glow-teal" />
+        <div className="glow-topleft" />
+        <div className="glow-topright" />
+        <div className="dot-grid" />
+      </div>
 
       <Sidebar />
       <MobileNav />

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import useConfigStore from '@/store/useConfigStore'
 import type { ServiceId } from '@/store/useConfigStore'
+import { useThemeStore, THEME_META } from '@/store/useThemeStore'
+import type { ThemeName, ThemeMode, GlowSpeed, GlowIntensity } from '@/store/useThemeStore'
 
 // ── Plex OAuth (PIN-based) ─────────────────────────────────────────────────────
 // Plex uses a PIN flow — no server-side secret needed, all client-side.
@@ -258,6 +260,156 @@ function HintBox({ id }: { id: ServiceId | 'cloudflare' }) {
   )
 }
 
+// ── Appearance ────────────────────────────────────────────────────────────────
+
+const THEME_NAMES: ThemeName[] = ['submarine', 'abyss', 'inferno', 'reactor']
+
+function PillGroup<T extends string>({
+  options, value, onChange, color,
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+  color?: string
+}) {
+  const accent = color ?? 'var(--accent-1)'
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {options.map(o => {
+        const active = o.value === value
+        return (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            style={{
+              padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: active ? 600 : 400,
+              background: active ? accent : 'var(--bg-surface)',
+              color: active ? 'var(--bg-base)' : 'var(--text-muted)',
+              transition: 'all 0.15s ease',
+              opacity: active ? 1 : 0.8,
+            }}
+          >{o.label}</button>
+        )
+      })}
+    </div>
+  )
+}
+
+function AppearanceSection() {
+  const { theme, mode, glowSpeed, glowIntensity, setTheme, setMode, setGlowSpeed, setGlowIntensity } = useThemeStore()
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Theme grid */}
+      <div>
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 10 }}>
+          Click a swatch to select theme + mode
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+          {THEME_NAMES.map(t => {
+            const meta   = THEME_META[t]
+            const isActive = theme === t
+            return (
+              <div
+                key={t}
+                style={{
+                  borderRadius: 10,
+                  border: `2px solid ${isActive ? meta[mode].p : 'var(--border)'}`,
+                  padding: '10px 12px',
+                  background: 'var(--bg-card)',
+                  transition: 'border-color 0.2s ease',
+                }}
+              >
+                <div style={{
+                  fontSize: '0.8rem', fontWeight: 600, marginBottom: 8,
+                  color: isActive ? meta[mode].p : 'var(--text-secondary)',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                  <span>{meta.icon}</span>{meta.label}
+                </div>
+
+                {/* Dark + light swatches */}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {(['dark', 'light'] as ThemeMode[]).map(m => {
+                    const v = meta[m]
+                    const selected = isActive && mode === m
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => { setTheme(t); setMode(m) }}
+                        title={`${meta.label} ${m}`}
+                        style={{
+                          flex: 1, height: 40, borderRadius: 7, cursor: 'pointer',
+                          background: v.bg,
+                          border: selected ? `2px solid ${v.p}` : '2px solid transparent',
+                          outline: selected ? `1px solid ${v.p}` : 'none',
+                          outlineOffset: 2,
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'border 0.15s ease',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                          padding: 0,
+                        }}
+                      >
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: v.p, boxShadow: `0 0 6px ${v.p}`, flexShrink: 0 }} />
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: v.s, boxShadow: `0 0 6px ${v.s}`, flexShrink: 0 }} />
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Dark / Light label */}
+                <div style={{ display: 'flex', marginTop: 4, gap: 6 }}>
+                  {(['dark', 'light'] as ThemeMode[]).map(m => (
+                    <div key={m} style={{
+                      flex: 1, textAlign: 'center', fontSize: '0.62rem',
+                      color: isActive && mode === m ? meta[m].p : 'var(--text-muted)',
+                      fontWeight: isActive && mode === m ? 600 : 400,
+                      transition: 'color 0.15s',
+                    }}>
+                      {m === 'dark' ? 'Dark' : 'Light'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Glow controls */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 6 }}>Glow Speed</div>
+          <PillGroup<GlowSpeed>
+            value={glowSpeed}
+            onChange={setGlowSpeed}
+            options={[
+              { value: 'slow',   label: 'Slow' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'fast',   label: 'Fast' },
+            ]}
+          />
+        </div>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 6 }}>Glow Intensity</div>
+          <PillGroup<GlowIntensity>
+            value={glowIntensity}
+            onChange={setGlowIntensity}
+            options={[
+              { value: 'low',    label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high',   label: 'High' },
+            ]}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Service definitions ────────────────────────────────────────────────────────
 
 const CF_FIELDS: { key: 'cfClientId' | 'cfClientSecret'; label: string }[] = [
@@ -339,6 +491,15 @@ export default function Settings() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+          {/* ── Appearance ── */}
+          <div style={{ ...cardStyle, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <span style={{ fontSize: '1.1rem' }}>🎨</span>
+              <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>Appearance</span>
+            </div>
+            <AppearanceSection />
+          </div>
 
           {/* ── Cloud Sync ── */}
           <div style={{ ...cardStyle, border: `1px solid ${syncStatus === 'error' ? 'rgba(248,113,113,0.3)' : syncStatus === 'success' ? 'rgba(0,229,160,0.25)' : 'var(--border)'}` }}>
