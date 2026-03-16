@@ -186,7 +186,7 @@ interface UseOverseerrReturn {
   clearResults: () => void
   discover: (mode: DiscoverMode, id?: number, page?: number) => void
   fetchMetadata: () => Promise<void>
-  requestMedia: (mediaId: number, mediaType: 'movie' | 'tv') => Promise<void>
+  requestMedia: (mediaId: number, mediaType: 'movie' | 'tv', seasons?: number[]) => Promise<void>
 }
 
 const POLL_INTERVAL = 30000
@@ -211,8 +211,9 @@ export function useOverseerr(): UseOverseerrReturn {
   const [requestingId, setRequestingId]     = useState<number | null>(null)
   const [error, setError]                   = useState<string | null>(null)
 
-  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const discoverCtrl = useRef<AbortController | null>(null)
+  const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const discoverCtrl     = useRef<AbortController | null>(null)
+  const discoverSession  = useRef(0)
 
   // ── Requests ───────────────────────────────────────────────────────────────
 
@@ -290,11 +291,19 @@ export function useOverseerr(): UseOverseerrReturn {
   const discover = useCallback((mode: DiscoverMode, id?: number, page = 1) => {
     if (!isOverseerrConfigured()) return
 
-    // Only abort/reset on new mode/id requests (page 1)
+    // On a fresh mode/id request (page 1): abort any in-flight fetch, bump the
+    // session counter, and immediately clear stale results so the grid doesn't
+    // flash the previous mode's content while the new fetch is in flight.
     if (page === 1) {
       if (discoverCtrl.current) discoverCtrl.current.abort()
       discoverCtrl.current = new AbortController()
+      discoverSession.current += 1
+      setDiscoverResults([])
+      setDiscoverPage(1)
+      setDiscoverTotalPages(1)
     }
+
+    const sessionId = discoverSession.current
 
     const endpoints: Record<DiscoverMode, string> = {
       trending:    '/api/v1/discover/trending',
@@ -311,6 +320,8 @@ export function useOverseerr(): UseOverseerrReturn {
     proxyFetch(overseerrUrl(`${url}?page=${page}&language=en`), overseerrHeaders())
       .then(r => r.json())
       .then(data => {
+        // Discard results from a stale session (user already switched mode)
+        if (discoverSession.current !== sessionId) return
         const incoming: OverseerrResult[] = data.results ?? []
         if (page === 1) {
           setDiscoverResults(incoming)
@@ -321,7 +332,9 @@ export function useOverseerr(): UseOverseerrReturn {
         setDiscoverTotalPages(data.totalPages ?? 1)
       })
       .catch(() => { /* aborted or failed */ })
-      .finally(() => setDiscoverLoading(false))
+      .finally(() => {
+        if (discoverSession.current === sessionId) setDiscoverLoading(false)
+      })
   }, [])
 
   // ── Metadata (genres + networks) ───────────────────────────────────────────
@@ -354,18 +367,25 @@ export function useOverseerr(): UseOverseerrReturn {
 
   // ── Request media ──────────────────────────────────────────────────────────
 
-  const requestMedia = useCallback(async (mediaId: number, mediaType: 'movie' | 'tv') => {
+  const requestMedia = useCallback(async (mediaId: number, mediaType: 'movie' | 'tv', seasons?: number[]) => {
     if (!isOverseerrConfigured()) return
     setRequestingId(mediaId)
+    const body: Record<string, unknown> = { mediaId, mediaType }
+    if (mediaType === 'tv' && seasons && seasons.length > 0) body.seasons = seasons
     try {
-      await proxyPost(overseerrUrl('/api/v1/request'), { mediaId, mediaType }, overseerrHeaders())
+      const response = await proxyPost(overseerrUrl('/api/v1/request'), body, overseerrHeaders())
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error((errData as any)?.message ?? `Request failed (${response.status})`)
+      }
       await fetchRequests()
-      const setAvailable = (prev: OverseerrResult[]) =>
+      const setPending = (prev: OverseerrResult[]) =>
         prev.map(r => r.id === mediaId ? { ...r, mediaInfo: { status: 2 } } : r)
-      setResults(setAvailable)
-      setDiscoverResults(setAvailable)
+      setResults(setPending)
+      setDiscoverResults(setPending)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed')
+      throw e
     } finally {
       setRequestingId(null)
     }

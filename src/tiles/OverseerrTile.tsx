@@ -102,15 +102,16 @@ function formatRuntime(mins?: number) {
 }
 
 function OverseerrDetailModal({
-  item, requestingId, onRequest, onClose,
+  item, onRequest, onClose,
 }: {
   item: OverseerrResult
-  requestingId: number | null
-  onRequest: (id: number, type: 'movie' | 'tv') => void
+  onRequest: (id: number, type: 'movie' | 'tv', seasons?: number[]) => Promise<void>
   onClose: () => void
 }) {
   const [detail, setDetail] = useState<OverseerrDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reqState, setReqState] = useState<'idle' | 'requesting' | 'done' | 'error'>('idle')
+  const [selectedSeasons, setSelectedSeasons] = useState<number[]>([])
 
   // Fetch full detail on mount
   useEffect(() => {
@@ -118,10 +119,31 @@ function OverseerrDetailModal({
     setLoading(true)
     setDetail(null)
     fetchOverseerrDetail(item.id, item.mediaType).then(d => {
-      if (!cancelled) { setDetail(d); setLoading(false) }
+      if (!cancelled) {
+        setDetail(d)
+        setLoading(false)
+        // Default: all seasons selected
+        if (d?.numberOfSeasons && d.numberOfSeasons > 0) {
+          setSelectedSeasons(Array.from({ length: d.numberOfSeasons }, (_, i) => i + 1))
+        }
+      }
     })
     return () => { cancelled = true }
   }, [item.id, item.mediaType])
+
+  const handleRequest = async () => {
+    setReqState('requesting')
+    try {
+      await onRequest(
+        item.id,
+        item.mediaType,
+        item.mediaType === 'tv' ? selectedSeasons : undefined,
+      )
+      setReqState('done')
+    } catch {
+      setReqState('error')
+    }
+  }
 
   // ESC to close + body scroll lock
   useEffect(() => {
@@ -142,7 +164,8 @@ function OverseerrDetailModal({
     ? `https://image.tmdb.org/t/p/w1280${d.backdropPath}` : undefined
   const status      = d?.mediaInfo?.status ?? item.mediaInfo?.status
   const statusInfo  = status ? MEDIA_STATUS[status] : null
-  const isReq       = requestingId === item.id
+  const alreadyHandled = !!statusInfo || reqState === 'done'
+  const displayStatus  = reqState === 'done' ? { label: 'Pending', color: '#f39c12' } : statusInfo
 
   // Ratings
   const tmdbScore = d?.ratings?.tmdb?.voteAverage ?? d?.voteAverage ?? item.voteAverage
@@ -374,28 +397,81 @@ function OverseerrDetailModal({
               </div>
 
               {/* Action */}
-              <div>
-                {statusInfo ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {alreadyHandled ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{
                       width: 9, height: 9, borderRadius: '50%',
-                      background: statusInfo.color, boxShadow: `0 0 8px ${statusInfo.color}`,
+                      background: displayStatus?.color, boxShadow: `0 0 8px ${displayStatus?.color}`,
                       display: 'inline-block', flexShrink: 0,
                     }} />
-                    <span style={{ fontSize: '0.82rem', color: statusInfo.color, fontWeight: 600 }}>{statusInfo.label}</span>
+                    <span style={{ fontSize: '0.82rem', color: displayStatus?.color, fontWeight: 600 }}>{displayStatus?.label}</span>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => { onRequest(item.id, item.mediaType); onClose() }}
-                    disabled={isReq}
-                    style={{
-                      padding: '9px 20px', borderRadius: 8, border: 'none',
-                      background: isReq ? `${ACCENT}44` : ACCENT,
-                      color: '#000', fontSize: '0.82rem', fontWeight: 700,
-                      cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit',
-                      width: '100%',
-                    }}
-                  >{isReq ? 'Requesting…' : '+ Request'}</button>
+                  <>
+                    {/* Season picker — TV only */}
+                    {item.mediaType === 'tv' && !loading && detail?.numberOfSeasons && detail.numberOfSeasons > 0 && (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>Seasons</span>
+                          <button
+                            onClick={() => setSelectedSeasons(Array.from({ length: detail.numberOfSeasons! }, (_, i) => i + 1))}
+                            style={{ fontSize: '0.65rem', color: ACCENT, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                          >All</button>
+                          <button
+                            onClick={() => setSelectedSeasons([])}
+                            style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                          >None</button>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {Array.from({ length: detail.numberOfSeasons }, (_, i) => i + 1).map(s => {
+                            const sel = selectedSeasons.includes(s)
+                            return (
+                              <button
+                                key={s}
+                                onClick={() => setSelectedSeasons(prev =>
+                                  sel ? prev.filter(x => x !== s) : [...prev, s].sort((a, b) => a - b)
+                                )}
+                                style={{
+                                  padding: '4px 10px', borderRadius: 6, border: 'none',
+                                  background: sel ? `${ACCENT}28` : 'rgba(255,255,255,0.06)',
+                                  color: sel ? ACCENT : 'var(--text-muted)',
+                                  fontSize: '0.7rem', fontWeight: sel ? 600 : 400,
+                                  cursor: 'pointer', fontFamily: 'inherit',
+                                  outline: sel ? `1px solid ${ACCENT}55` : '1px solid transparent',
+                                  transition: 'all 0.12s',
+                                }}
+                              >S{s}</button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleRequest}
+                      disabled={reqState === 'requesting' || (item.mediaType === 'tv' && selectedSeasons.length === 0)}
+                      style={{
+                        padding: '9px 20px', borderRadius: 8, border: 'none',
+                        background: reqState === 'requesting' ? `${ACCENT}44`
+                          : reqState === 'error' ? '#e74c3c'
+                          : (item.mediaType === 'tv' && selectedSeasons.length === 0) ? 'rgba(255,255,255,0.06)'
+                          : ACCENT,
+                        color: reqState === 'error' ? '#fff'
+                          : (item.mediaType === 'tv' && selectedSeasons.length === 0) ? 'var(--text-muted)'
+                          : '#000',
+                        fontSize: '0.82rem', fontWeight: 700,
+                        cursor: reqState === 'requesting' ? 'wait' : 'pointer',
+                        fontFamily: 'inherit', width: '100%',
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      {reqState === 'requesting' ? 'Requesting…'
+                        : reqState === 'error' ? 'Failed — Try Again'
+                        : item.mediaType === 'tv' && selectedSeasons.length === 0 ? 'Select at least one season'
+                        : '+ Request'}
+                    </button>
+                  </>
                 )}
               </div>
             </>
@@ -880,7 +956,6 @@ export default function OverseerrTile() {
     {selectedItem && (
       <OverseerrDetailModal
         item={selectedItem}
-        requestingId={requestingId}
         onRequest={requestMedia}
         onClose={() => setSelectedItem(null)}
       />
