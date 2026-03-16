@@ -1,14 +1,14 @@
 import { NavLink } from 'react-router-dom'
+import useTileStore from '@/store/useTileStore'
 
 const items = [
-  { to: '/',         icon: '▦', label: 'Dash' },
-  { to: '/overseerr',icon: '🔍', label: 'Search' },
-  { to: '/queue',    icon: '⬇️', label: 'Queue' },
-  { to: '/server',   icon: '🖥️', label: 'Server' },
-  { to: '/settings', icon: '⚙', label: 'Settings' },
+  { to: '/',         icon: '▦', label: 'Dashboard' },
+  { to: '/settings', icon: '⚙', label: 'Settings'  },
 ]
 
 export default function MobileNav() {
+  const { editMode, toggleEditMode } = useTileStore()
+
   return (
     <nav
       className="mobile-nav"
@@ -39,7 +39,7 @@ export default function MobileNav() {
             color: isActive ? 'var(--accent-1)' : 'var(--text-muted)',
             fontSize: '0.65rem',
             fontWeight: 500,
-            padding: '8px 12px',
+            padding: '8px 20px',
             borderRadius: '10px',
             background: isActive ? 'rgba(0,136,255,0.08)' : 'transparent',
             transition: 'all 200ms ease',
@@ -49,6 +49,23 @@ export default function MobileNav() {
           <span>{item.label}</span>
         </NavLink>
       ))}
+
+      {/* Edit layout toggle — only relevant on mobile for reordering in the future */}
+      <button
+        type="button"
+        onClick={toggleEditMode}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+          background: editMode ? 'rgba(0,136,255,0.12)' : 'transparent',
+          border: 'none', borderRadius: '10px', padding: '8px 20px',
+          color: editMode ? 'var(--accent-1)' : 'var(--text-muted)',
+          fontSize: '0.65rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+          transition: 'all 200ms ease',
+        }}
+      >
+        <span style={{ fontSize: '1.3rem' }}>✦</span>
+        <span>{editMode ? 'Done' : 'Edit'}</span>
+      </button>
     </nav>
   )
 }

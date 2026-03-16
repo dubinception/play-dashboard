@@ -34,9 +34,25 @@ const TILE_MAP: Record<string, React.ComponentType> = {
   mealie:    MealieTile,
 }
 
-const ROW_HEIGHT = 80
-const COLS = 12
+const DESKTOP_COLS = 12
+const TABLET_COLS  = 6
+const ROW_HEIGHT   = 80
 const MARGIN: [number, number] = [12, 12]
+
+// Breakpoints
+const BP_MOBILE  = 768   // ≤ this → mobile stack
+const BP_TABLET  = 1100  // ≤ this (and > mobile) → 6-col grid
+
+// Scale a 12-col layout down to 6-col for tablet display.
+// The stored layout is never modified — this is display-only.
+function scaleLayout(layout: Layout[], fromCols: number, toCols: number): Layout[] {
+  const ratio = toCols / fromCols
+  return layout.map(l => ({
+    ...l,
+    x: Math.floor(l.x * ratio),
+    w: Math.max(1, Math.round(l.w * ratio)),
+  }))
+}
 
 // Fallback layout entry for any tile that's missing a position
 function fallbackEntry(id: string, index: number): Layout {
@@ -47,10 +63,15 @@ export default function Dashboard() {
   const { tiles, layout, setLayout, editMode, sidebarCollapsed } = useTileStore()
   const { width } = useWindowSize()
 
-  const sidebarWidth = width < 769 ? 0 : (sidebarCollapsed ? 60 : 220)
-  const canvasWidth = Math.max(300, (width || 1200) - sidebarWidth - 32)
+  const isMobile = width <= BP_MOBILE
+  const isTablet = width > BP_MOBILE && width <= BP_TABLET
+  const isDesktop = width > BP_TABLET
 
-  // Ensure every tile in the registry has a layout entry (prevents missing tiles)
+  const sidebarWidth = isMobile ? 0 : (sidebarCollapsed ? 60 : 220)
+  const padding = isMobile ? 10 : 16
+  const canvasWidth = Math.max(280, (width || 1200) - sidebarWidth - padding * 2)
+
+  // Ensure every tile in the registry has a layout entry
   const fullLayout = useMemo(() => {
     return TILE_REGISTRY.map((tile, i) => {
       const existing = layout.find((l) => l.i === tile.id)
@@ -63,9 +84,29 @@ export default function Dashboard() {
     [fullLayout, tiles]
   )
 
+  // Tablet: scale 12-col layout → 6-col for display only
+  const tabletLayout = useMemo(
+    () => scaleLayout(visibleLayout, DESKTOP_COLS, TABLET_COLS),
+    [visibleLayout]
+  )
+
+  // Mobile: sort tiles by (y, x) so stacking order matches the desktop layout
+  const mobileOrder = useMemo(
+    () => [...visibleLayout].sort((a, b) => a.y - b.y || a.x - b.x),
+    [visibleLayout]
+  )
+
+  const activeCols   = isTablet ? TABLET_COLS : DESKTOP_COLS
+  const activeLayout = isTablet ? tabletLayout : visibleLayout
+  // Edit mode only makes sense on desktop (drag/resize needs full grid)
+  const canEdit = isDesktop && editMode
+
   return (
-    <div style={{ padding: '16px', minHeight: '100vh' }} className={editMode ? 'edit-mode' : ''}>
-      {editMode && (
+    <div
+      style={{ padding: `${padding}px`, minHeight: '100vh', paddingBottom: isMobile ? 80 : padding }}
+      className={canEdit ? 'edit-mode' : ''}
+    >
+      {canEdit && (
         <div style={{
           marginBottom: '12px', padding: '8px 16px', borderRadius: '8px',
           background: 'rgba(0,136,255,0.08)', border: '1px solid rgba(0,136,255,0.2)',
@@ -74,28 +115,48 @@ export default function Dashboard() {
           ✦ Edit mode — drag tiles to rearrange, grab the corner to resize
         </div>
       )}
-      <GridLayout
-        layout={visibleLayout}
-        cols={COLS}
-        rowHeight={ROW_HEIGHT}
-        width={canvasWidth}
-        margin={MARGIN}
-        isDraggable={editMode}
-        isResizable={editMode}
-        compactType="vertical"
-        onLayoutChange={setLayout}
-        draggableHandle=".tile-header"
-        resizeHandles={['se']}
-      >
-        {visibleLayout.map((l) => {
-          const TileComponent = TILE_MAP[l.i]
-          return TileComponent ? (
-            <div key={l.i} style={{ cursor: editMode ? 'grab' : 'default' }}>
-              <TileComponent />
-            </div>
-          ) : null
-        })}
-      </GridLayout>
+
+      {isMobile ? (
+        /* ── Mobile: vertical stack ── */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {mobileOrder.map(l => {
+            const TileComponent = TILE_MAP[l.i]
+            if (!TileComponent) return null
+            // Use stored height but enforce a reasonable min/max
+            const tileH = Math.max(220, Math.min(l.h * ROW_HEIGHT, 520))
+            return (
+              <div key={l.i} style={{ height: tileH, width: '100%' }}>
+                <TileComponent />
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        /* ── Tablet / Desktop: grid ── */
+        <GridLayout
+          layout={activeLayout}
+          cols={activeCols}
+          rowHeight={ROW_HEIGHT}
+          width={canvasWidth}
+          margin={MARGIN}
+          isDraggable={canEdit}
+          isResizable={canEdit}
+          compactType="vertical"
+          // Only persist layout changes on desktop so the stored 12-col layout stays clean
+          onLayoutChange={isDesktop ? setLayout : () => {}}
+          draggableHandle=".tile-header"
+          resizeHandles={['se']}
+        >
+          {activeLayout.map((l) => {
+            const TileComponent = TILE_MAP[l.i]
+            return TileComponent ? (
+              <div key={l.i} style={{ cursor: canEdit ? 'grab' : 'default' }}>
+                <TileComponent />
+              </div>
+            ) : null
+          })}
+        </GridLayout>
+      )}
     </div>
   )
 }
