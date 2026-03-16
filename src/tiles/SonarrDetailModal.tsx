@@ -177,13 +177,14 @@ export default function SonarrDetailModal({
   onSearch, onRefresh, onDelete,
   fetchCredits, serviceUrl,
 }: Props) {
-  const [credits, setCredits]       = useState<SonarrCredit[]>([])
-  const [monitored, setMonitored]   = useState(series.monitored)
-  const [profileId, setProfileId]   = useState(series.qualityProfileId)
-  const [showMenu, setShowMenu]     = useState(false)
+  const [credits, setCredits]           = useState<SonarrCredit[]>([])
+  const [monitored, setMonitored]       = useState(series.monitored)
+  const [profileId, setProfileId]       = useState(series.qualityProfileId)
+  const [showMenu, setShowMenu]         = useState(false)
+  const [showQualityMenu, setShowQualityMenu] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [busy, setBusy]             = useState(false)
-  const [toast, setToast]           = useState('')
+  const [busy, setBusy]                 = useState(false)
+  const [toast, setToast]               = useState('')
 
   const poster  = series.images.find(i => i.coverType === 'poster')?.remoteUrl
   const fanart  = series.images.find(i => i.coverType === 'fanart')?.remoteUrl
@@ -365,19 +366,40 @@ export default function SonarrDetailModal({
             </button>
 
             {/* Quality profile */}
-            <select
-              value={profileId}
-              onChange={e => handleProfile(Number(e.target.value))}
-              style={{
-                padding: '6px 10px', borderRadius: 6,
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-                color: 'var(--text-secondary)', fontSize: '0.78rem', fontFamily: 'inherit', cursor: 'pointer',
-              }}
-            >
-              {qualityProfiles.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setShowQualityMenu(m => !m); setShowMenu(false) }}
+                disabled={busy}
+                style={{
+                  padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+                  fontSize: '0.78rem', fontFamily: 'inherit', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}
+              >
+                {qualityProfiles.find(p => p.id === profileId)?.name ?? 'Quality'} ▾
+              </button>
+              {showQualityMenu && (
+                <div style={{
+                  position: 'absolute', top: '110%', left: 0, zIndex: 20, minWidth: 160,
+                  background: '#0d1b2a', border: '1px solid rgba(53,197,244,0.2)',
+                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden',
+                }}>
+                  {qualityProfiles.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => { handleProfile(p.id); setShowQualityMenu(false) }}
+                      style={{
+                        width: '100%', padding: '9px 14px', textAlign: 'left', border: 'none',
+                        background: p.id === profileId ? 'rgba(53,197,244,0.15)' : 'transparent',
+                        color: p.id === profileId ? ACCENT : 'var(--text-secondary)',
+                        fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >{p.name}</button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Search */}
             <button
