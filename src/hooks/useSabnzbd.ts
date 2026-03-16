@@ -23,8 +23,21 @@ export interface SabQueue {
   noofslots_total: number
 }
 
+export interface SabHistorySlot {
+  nzo_id: string
+  name: string
+  status: string       // "Completed" | "Failed" | "Extracting" | "Verifying" | etc.
+  size: string
+  category: string
+  completed: number    // unix timestamp (seconds)
+  fail_message?: string
+  action_line?: string
+}
+
 interface UseSabnzbdReturn {
   queue: SabQueue | null
+  history: SabHistorySlot[]
+  historyLoading: boolean
   loading: boolean
   error: string | null
   pause: () => Promise<void>
@@ -33,14 +46,18 @@ interface UseSabnzbdReturn {
   refresh: () => void
 }
 
-const POLL_INTERVAL = 5000
+const QUEUE_POLL   = 5000
+const HISTORY_POLL = 60000
 
 export function useSabnzbd(): UseSabnzbdReturn {
   const { getService } = useConfigStore()
-  const [queue, setQueue] = useState<SabQueue | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [queue, setQueue]               = useState<SabQueue | null>(null)
+  const [history, setHistory]           = useState<SabHistorySlot[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState<string | null>(null)
+  const queueTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const historyTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const targetUrl = useCallback((mode: string, extra = '') => {
     const { url, apiKey } = getService('sabnzbd') as { url: string; apiKey: string }
@@ -60,9 +77,7 @@ export function useSabnzbd(): UseSabnzbdReturn {
       const text = await res.text()
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       let data: any
-      try {
-        data = JSON.parse(text)
-      } catch {
+      try { data = JSON.parse(text) } catch {
         throw new Error(`Not valid JSON — got: ${text.slice(0, 120)}`)
       }
       setQueue(data.queue)
@@ -75,6 +90,21 @@ export function useSabnzbd(): UseSabnzbdReturn {
     }
   }, [targetUrl, isConfigured])
 
+  const fetchHistory = useCallback(async () => {
+    if (!isConfigured()) return
+    setHistoryLoading(true)
+    try {
+      const res = await proxyFetch(targetUrl('history', '&limit=40'))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setHistory(data.history?.slots ?? [])
+    } catch {
+      // non-critical — keep previous history
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [targetUrl, isConfigured])
+
   const refresh = useCallback(() => {
     setLoading(true)
     fetchQueue()
@@ -84,9 +114,14 @@ export function useSabnzbd(): UseSabnzbdReturn {
     if (!isConfigured()) return
     setLoading(true)
     fetchQueue()
-    timerRef.current = setInterval(fetchQueue, POLL_INTERVAL)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [fetchQueue, isConfigured])
+    fetchHistory()
+    queueTimerRef.current   = setInterval(fetchQueue,   QUEUE_POLL)
+    historyTimerRef.current = setInterval(fetchHistory, HISTORY_POLL)
+    return () => {
+      if (queueTimerRef.current)   clearInterval(queueTimerRef.current)
+      if (historyTimerRef.current) clearInterval(historyTimerRef.current)
+    }
+  }, [fetchQueue, fetchHistory, isConfigured])
 
   const pause = useCallback(async () => {
     if (!isConfigured()) return
@@ -106,5 +141,5 @@ export function useSabnzbd(): UseSabnzbdReturn {
     await fetchQueue()
   }, [targetUrl, fetchQueue, isConfigured])
 
-  return { queue, loading, error, pause, resume, deleteAll, refresh }
+  return { queue, history, historyLoading, loading, error, pause, resume, deleteAll, refresh }
 }
