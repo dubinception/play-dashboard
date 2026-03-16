@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import TileWrapper from '@/components/TileWrapper'
 import { useOverseerr, MEDIA_STATUS, REQUEST_STATUS } from '@/hooks/useOverseerr'
 import useConfigStore from '@/store/useConfigStore'
-import type { OverseerrResult, OverseerrRequest, DiscoverMode } from '@/hooks/useOverseerr'
+import type { OverseerrResult, OverseerrRequest, OverseerrDetail, DiscoverMode } from '@/hooks/useOverseerr'
+import { fetchOverseerrDetail } from '@/hooks/useOverseerr'
 
 const ACCENT = '#e5a00d'
 
@@ -72,6 +73,34 @@ function Pill({
 
 // ── Detail modal ──────────────────────────────────────────────────────────────
 
+function MetaRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null
+  return (
+    <div style={{ display: 'flex', gap: 6, fontSize: '0.72rem', lineHeight: 1.4 }}>
+      <span style={{ color: 'var(--text-muted)', flexShrink: 0, minWidth: 90 }}>{label}</span>
+      <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{value}</span>
+    </div>
+  )
+}
+
+const LANG_NAMES: Record<string, string> = {
+  en: 'English', ja: 'Japanese', ko: 'Korean', fr: 'French', de: 'German',
+  es: 'Spanish', it: 'Italian', pt: 'Portuguese', zh: 'Chinese', ru: 'Russian',
+  ar: 'Arabic', hi: 'Hindi', sv: 'Swedish', da: 'Danish', nl: 'Dutch',
+}
+
+function langName(code?: string) {
+  if (!code) return undefined
+  return LANG_NAMES[code] ?? code.toUpperCase()
+}
+
+function formatRuntime(mins?: number) {
+  if (!mins) return undefined
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 function OverseerrDetailModal({
   item, requestingId, onRequest, onClose,
 }: {
@@ -80,13 +109,19 @@ function OverseerrDetailModal({
   onRequest: (id: number, type: 'movie' | 'tv') => void
   onClose: () => void
 }) {
-  const title      = mediaTitle(item)
-  const year       = mediaYear(item)
-  const src        = item.posterPath ? `https://image.tmdb.org/t/p/w342${item.posterPath}` : undefined
-  const status     = item.mediaInfo?.status
-  const statusInfo = status ? MEDIA_STATUS[status] : null
-  const isReq      = requestingId === item.id
-  const typeLabel  = item.mediaType === 'movie' ? 'Movie' : 'TV Series'
+  const [detail, setDetail] = useState<OverseerrDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch full detail on mount
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setDetail(null)
+    fetchOverseerrDetail(item.id, item.mediaType).then(d => {
+      if (!cancelled) { setDetail(d); setLoading(false) }
+    })
+    return () => { cancelled = true }
+  }, [item.id, item.mediaType])
 
   // ESC to close + body scroll lock
   useEffect(() => {
@@ -97,12 +132,39 @@ function OverseerrDetailModal({
     return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
   }, [onClose])
 
+  const d          = detail
+  const title      = d?.title ?? d?.name ?? mediaTitle(item)
+  const year       = (d?.releaseDate ?? d?.firstAirDate ?? mediaYear(item)).slice(0, 4)
+  const typeLabel  = item.mediaType === 'movie' ? 'Movie' : 'TV Series'
+  const posterSrc  = (d?.posterPath ?? item.posterPath)
+    ? `https://image.tmdb.org/t/p/w342${d?.posterPath ?? item.posterPath}` : undefined
+  const backdropSrc = d?.backdropPath
+    ? `https://image.tmdb.org/t/p/w1280${d.backdropPath}` : undefined
+  const status      = d?.mediaInfo?.status ?? item.mediaInfo?.status
+  const statusInfo  = status ? MEDIA_STATUS[status] : null
+  const isReq       = requestingId === item.id
+
+  // Ratings
+  const tmdbScore = d?.ratings?.tmdb?.voteAverage ?? d?.voteAverage ?? item.voteAverage
+  const imdbScore = d?.ratings?.imdb?.score
+  const rtCritics = d?.ratings?.rt?.criticsScore
+  const rtAudience = d?.ratings?.rt?.audienceScore
+  const rtRating  = d?.ratings?.rt?.criticsRating  // "Certified Fresh", "Fresh", "Rotten"
+
+  // Metadata
+  const releaseDate = d?.releaseDate ?? d?.firstAirDate
+  const studio = d?.productionCompanies?.map(c => c.name).slice(0, 2).join(', ')
+  const country = d?.productionCountries?.map(c => c.name).slice(0, 2).join(', ')
+  const network = d?.networks?.map(n => n.name).slice(0, 2).join(', ')
+
+  const rtIcon = rtRating === 'Certified Fresh' ? '🍅✓' : rtRating === 'Fresh' ? '🍅' : rtRating === 'Rotten' ? '🤢' : '🍅'
+
   return createPortal(
     <div
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(8px)',
+        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
       }}
@@ -110,99 +172,234 @@ function OverseerrDetailModal({
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 560,
-          borderRadius: 14, overflow: 'hidden',
+          width: '100%', maxWidth: 620,
+          borderRadius: 16, overflow: 'hidden',
           background: 'var(--bg-card)',
           border: `1px solid ${ACCENT}30`,
-          boxShadow: `0 0 60px ${ACCENT}18, 0 24px 60px rgba(0,0,0,0.7)`,
+          boxShadow: `0 0 80px ${ACCENT}14, 0 24px 80px rgba(0,0,0,0.8)`,
           display: 'flex', flexDirection: 'column',
           position: 'relative',
+          maxHeight: 'calc(100vh - 40px)',
+          overflowY: 'auto',
         }}
       >
         {/* Close button */}
         <button
           onClick={onClose}
           style={{
-            position: 'absolute', top: 10, right: 10, zIndex: 2,
-            width: 30, height: 30, borderRadius: '50%', border: 'none',
-            background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '1rem',
+            position: 'absolute', top: 10, right: 10, zIndex: 10,
+            width: 32, height: 32, borderRadius: '50%', border: 'none',
+            background: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '1.1rem',
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(4px)',
           }}
         >×</button>
 
-        {/* Body */}
-        <div style={{ display: 'flex', gap: 0 }}>
+        {/* Backdrop hero */}
+        <div style={{ position: 'relative', width: '100%', height: 180, flexShrink: 0, background: '#111' }}>
+          {backdropSrc && (
+            <img
+              src={backdropSrc}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: 0.6 }}
+            />
+          )}
+          {/* gradient overlay */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, var(--bg-card) 100%)',
+          }} />
 
+          {/* Type badge over backdrop */}
+          <div style={{ position: 'absolute', top: 12, left: 12 }}>
+            <span style={{
+              fontSize: '0.62rem', fontWeight: 700, padding: '3px 8px', borderRadius: 5,
+              background: `${ACCENT}cc`, color: '#000',
+            }}>{typeLabel}</span>
+          </div>
+        </div>
+
+        {/* Poster + title row */}
+        <div style={{ display: 'flex', gap: 16, padding: '0 18px 12px', marginTop: -70, position: 'relative', zIndex: 2 }}>
           {/* Poster */}
-          <div style={{ width: 160, flexShrink: 0 }}>
-            {src ? (
-              <img src={src} alt={title} style={{ width: '100%', height: 240, objectFit: 'cover', display: 'block' }} />
+          <div style={{ flexShrink: 0 }}>
+            {posterSrc ? (
+              <img
+                src={posterSrc}
+                alt={title}
+                style={{
+                  width: 100, height: 150, objectFit: 'cover', display: 'block',
+                  borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  border: `2px solid rgba(255,255,255,0.12)`,
+                }}
+              />
             ) : (
               <div style={{
-                width: '100%', height: 240,
-                background: `linear-gradient(135deg,${ACCENT}18,rgba(0,0,0,0.3))`,
+                width: 100, height: 150, borderRadius: 8,
+                background: `linear-gradient(135deg,${ACCENT}22,rgba(0,0,0,0.4))`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '3rem', color: 'rgba(255,255,255,0.15)',
-              }}>
-                {item.mediaType === 'movie' ? '🎬' : '📺'}
-              </div>
+                fontSize: '2.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+              }}>{item.mediaType === 'movie' ? '🎬' : '📺'}</div>
             )}
           </div>
 
-          {/* Info */}
-          <div style={{ flex: 1, padding: '16px 16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-
-            {/* Type + year */}
+          {/* Title + year + availability */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 4, paddingBottom: 4, minWidth: 0 }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25 }}>{title}</div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{
-                fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-                background: `${ACCENT}20`, border: `1px solid ${ACCENT}44`, color: ACCENT,
-              }}>{typeLabel}</span>
-              {year && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{year}</span>}
-              {item.voteAverage && item.voteAverage > 0 ? (
-                <span style={{ fontSize: '0.7rem', color: '#ffc230', marginLeft: 'auto' }}>★ {item.voteAverage.toFixed(1)}</span>
-              ) : null}
-            </div>
-
-            {/* Title */}
-            <div style={{
-              fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3,
-            }}>{title}</div>
-
-            {/* Status */}
-            {statusInfo && <StatusBadge color={statusInfo.color} label={statusInfo.label} />}
-
-            {/* Overview */}
-            {item.overview && (
-              <p style={{
-                fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.6,
-                margin: 0, flex: 1,
-                display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }}>{item.overview}</p>
-            )}
-
-            {/* Action */}
-            <div style={{ marginTop: 'auto', paddingTop: 6 }}>
-              {statusInfo ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusInfo.color, boxShadow: `0 0 6px ${statusInfo.color}`, display: 'inline-block' }} />
-                  <span style={{ fontSize: '0.78rem', color: statusInfo.color, fontWeight: 600 }}>{statusInfo.label}</span>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { onRequest(item.id, item.mediaType); onClose() }}
-                  disabled={isReq}
-                  style={{
-                    padding: '8px 20px', borderRadius: 8, border: 'none',
-                    background: isReq ? `${ACCENT}44` : ACCENT,
-                    color: '#000', fontSize: '0.8rem', fontWeight: 700,
-                    cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit',
-                    width: '100%',
-                  }}
-                >{isReq ? 'Requesting…' : '+ Request'}</button>
+              {year && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{year}</span>}
+              {d?.status && (
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>· {d.status}</span>
+              )}
+              {item.mediaType === 'tv' && d?.numberOfSeasons && (
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  · {d.numberOfSeasons} season{d.numberOfSeasons > 1 ? 's' : ''}
+                  {d.numberOfEpisodes ? `, ${d.numberOfEpisodes} ep` : ''}
+                </span>
+              )}
+              {item.mediaType === 'movie' && d?.runtime && (
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>· {formatRuntime(d.runtime)}</span>
               )}
             </div>
+            {statusInfo && <StatusBadge color={statusInfo.color} label={statusInfo.label} />}
           </div>
+        </div>
+
+        {/* Ratings row */}
+        {!loading && (tmdbScore || imdbScore || rtCritics !== undefined) && (
+          <div style={{
+            display: 'flex', gap: 0, margin: '0 18px 14px',
+            borderRadius: 10, overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'rgba(0,0,0,0.2)',
+          }}>
+            {tmdbScore && tmdbScore > 0 ? (
+              <div style={{
+                flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                borderRight: '1px solid rgba(255,255,255,0.07)',
+              }}>
+                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>TMDb</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffc230' }}>★ {tmdbScore.toFixed(1)}</span>
+                {d?.voteCount && <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: 1 }}>{d.voteCount.toLocaleString()} votes</span>}
+              </div>
+            ) : null}
+            {imdbScore ? (
+              <div style={{
+                flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                borderRight: '1px solid rgba(255,255,255,0.07)',
+              }}>
+                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>IMDb</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#f5c518' }}>★ {imdbScore.toFixed(1)}</span>
+                {d?.ratings?.imdb?.count && <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: 1 }}>{(d.ratings.imdb.count / 1000).toFixed(0)}K votes</span>}
+              </div>
+            ) : null}
+            {rtCritics !== undefined ? (
+              <div style={{
+                flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                borderRight: rtAudience !== undefined ? '1px solid rgba(255,255,255,0.07)' : undefined,
+              }}>
+                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{rtIcon} Critics</span>
+                <span style={{
+                  fontSize: '0.9rem', fontWeight: 700,
+                  color: rtCritics >= 60 ? '#fa320a' : '#7b7b7b',
+                }}>{rtCritics}%</span>
+              </div>
+            ) : null}
+            {rtAudience !== undefined ? (
+              <div style={{
+                flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center',
+              }}>
+                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>🍿 Audience</span>
+                <span style={{
+                  fontSize: '0.9rem', fontWeight: 700,
+                  color: rtAudience >= 60 ? '#ffc230' : '#7b7b7b',
+                }}>{rtAudience}%</span>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* Body content */}
+        <div style={{ padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[80, 100, 60, 90, 70].map((w, i) => (
+                <div key={i} style={{
+                  height: 12, borderRadius: 6, background: 'rgba(255,255,255,0.06)',
+                  width: `${w}%`, animation: 'pulse 1.5s ease-in-out infinite',
+                  animationDelay: `${i * 0.1}s`,
+                }} />
+              ))}
+            </div>
+          ) : (
+            <>
+              {/* Tagline */}
+              {d?.tagline && (
+                <p style={{ margin: 0, fontSize: '0.78rem', color: ACCENT, fontStyle: 'italic', opacity: 0.85 }}>
+                  "{d.tagline}"
+                </p>
+              )}
+
+              {/* Overview */}
+              {(d?.overview ?? item.overview) && (
+                <p style={{
+                  margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.65,
+                }}>{d?.overview ?? item.overview}</p>
+              )}
+
+              {/* Genre pills */}
+              {d?.genres && d.genres.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {d.genres.map(g => (
+                    <span key={g.id} style={{
+                      fontSize: '0.65rem', padding: '3px 9px', borderRadius: 20,
+                      background: `${ACCENT}18`, border: `1px solid ${ACCENT}33`,
+                      color: ACCENT,
+                    }}>{g.name}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Metadata grid */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: '10px 12px', borderRadius: 8, background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <MetaRow label="Release Date" value={releaseDate ? new Date(releaseDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : undefined} />
+                <MetaRow label="Language" value={langName(d?.originalLanguage)} />
+                {network && <MetaRow label="Network" value={network} />}
+                {studio && <MetaRow label="Studio" value={studio} />}
+                <MetaRow label="Country" value={country} />
+                {item.mediaType === 'tv' && d?.episodeRunTime && d.episodeRunTime.length > 0 && (
+                  <MetaRow label="Episode Runtime" value={formatRuntime(d.episodeRunTime[0])} />
+                )}
+              </div>
+
+              {/* Action */}
+              <div>
+                {statusInfo ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      width: 9, height: 9, borderRadius: '50%',
+                      background: statusInfo.color, boxShadow: `0 0 8px ${statusInfo.color}`,
+                      display: 'inline-block', flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: '0.82rem', color: statusInfo.color, fontWeight: 600 }}>{statusInfo.label}</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { onRequest(item.id, item.mediaType); onClose() }}
+                    disabled={isReq}
+                    style={{
+                      padding: '9px 20px', borderRadius: 8, border: 'none',
+                      background: isReq ? `${ACCENT}44` : ACCENT,
+                      color: '#000', fontSize: '0.82rem', fontWeight: 700,
+                      cursor: isReq ? 'wait' : 'pointer', fontFamily: 'inherit',
+                      width: '100%',
+                    }}
+                  >{isReq ? 'Requesting…' : '+ Request'}</button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>,

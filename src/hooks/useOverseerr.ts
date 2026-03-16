@@ -35,6 +35,56 @@ export interface OverseerrRequest {
 export interface OverseerrGenre { id: number; name: string }
 export interface OverseerrNetwork { id: number; name: string }
 
+export interface OverseerrDetail {
+  id: number
+  mediaType: 'movie' | 'tv'
+  title?: string
+  name?: string
+  tagline?: string
+  overview?: string
+  status?: string             // TMDb production status: "Released", "In Production", etc.
+  releaseDate?: string
+  firstAirDate?: string
+  lastAirDate?: string
+  posterPath?: string
+  backdropPath?: string
+  runtime?: number            // movie, minutes
+  episodeRunTime?: number[]   // TV
+  numberOfSeasons?: number
+  numberOfEpisodes?: number
+  voteAverage?: number
+  voteCount?: number
+  originalLanguage?: string
+  genres?: { id: number; name: string }[]
+  productionCompanies?: { id: number; name: string }[]
+  productionCountries?: { iso_3166_1: string; name: string }[]
+  networks?: { id: number; name: string }[]
+  mediaInfo?: { status: number }
+  externalIds?: { imdbId?: string }
+  ratings?: {
+    tmdb?: { voteAverage?: number; voteCount?: number; url?: string }
+    imdb?: { url?: string; score?: number; count?: number }
+    rt?: { criticsScore?: number; audienceScore?: number; criticsRating?: string; url?: string }
+  }
+}
+
+/** Fetch full movie or TV details from Overseerr (includes ratings, genres, metadata). */
+export async function fetchOverseerrDetail(
+  id: number,
+  type: 'movie' | 'tv',
+): Promise<OverseerrDetail | null> {
+  if (!isOverseerrConfigured()) return null
+  const endpoint = type === 'movie' ? `/api/v1/movie/${id}` : `/api/v1/tv/${id}`
+  try {
+    const res = await proxyFetch(overseerrUrl(endpoint), overseerrHeaders())
+    if (!res.ok) return null
+    const data = await res.json()
+    return { ...data, mediaType: type, id }
+  } catch {
+    return null
+  }
+}
+
 export type DiscoverMode =
   | 'trending'
   | 'movies'
