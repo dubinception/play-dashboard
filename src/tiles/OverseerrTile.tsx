@@ -329,47 +329,52 @@ const MODES: { value: DiscoverMode; label: string }[] = [
 ]
 
 function DiscoverTab({
-  results, discoverLoading, movieGenres, tvGenres, networks,
+  results, discoverLoading, discoverPage, discoverTotalPages,
+  movieGenres, tvGenres, networks,
   requestingId, onRequest, onDiscover,
 }: {
   results: OverseerrResult[]
   discoverLoading: boolean
+  discoverPage: number
+  discoverTotalPages: number
   movieGenres: { id: number; name: string }[]
   tvGenres: { id: number; name: string }[]
   networks: { id: number; name: string }[]
   requestingId: number | null
   onRequest: (id: number, type: 'movie' | 'tv') => void
-  onDiscover: (mode: DiscoverMode, id?: number) => void
+  onDiscover: (mode: DiscoverMode, id?: number, page?: number) => void
 }) {
-  const [mode, setMode]         = useState<DiscoverMode>('trending')
-  const [genreId, setGenreId]   = useState(0)
+  const [mode, setMode]           = useState<DiscoverMode>('trending')
+  const [genreId, setGenreId]     = useState(0)
   const [networkId, setNetworkId] = useState(0)
 
   const needsGenre   = mode === 'movie_genre' || mode === 'tv_genre'
   const needsNetwork = mode === 'tv_network'
   const genreList    = mode === 'movie_genre' ? movieGenres : tvGenres
+  const currentId    = needsGenre ? genreId : needsNetwork ? networkId : undefined
 
   // Fire discover when mode changes (for non-filtered modes)
   useEffect(() => {
     if (!needsGenre && !needsNetwork) {
       onDiscover(mode)
     }
-    // reset sub-selections when mode changes
     setGenreId(0)
     setNetworkId(0)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
-  const handleMode = (m: DiscoverMode) => setMode(m)
-
   const handleGenre = (id: number) => {
     setGenreId(id)
-    if (id) onDiscover(mode, id)
+    if (id) onDiscover(mode, id, 1)
   }
 
   const handleNetwork = (id: number) => {
     setNetworkId(id)
-    if (id) onDiscover(mode, id)
+    if (id) onDiscover(mode, id, 1)
+  }
+
+  const handleLoadMore = () => {
+    onDiscover(mode, currentId, discoverPage + 1)
   }
 
   const subPillStyle = (active: boolean): React.CSSProperties => ({
@@ -382,9 +387,7 @@ function DiscoverTab({
   })
 
   const showGrid = (!needsGenre || genreId > 0) && (!needsNetwork || networkId > 0)
-  const emptyHint = needsGenre
-    ? (genreList.length ? 'Pick a genre above' : 'Loading genres…')
-    : (networks.length ? 'Pick a network above' : 'Loading networks…')
+  const hasMore  = discoverPage < discoverTotalPages
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 7 }}>
@@ -392,16 +395,14 @@ function DiscoverTab({
       {/* Mode pills */}
       <div style={{ display: 'flex', gap: 5, overflowX: 'auto', flexShrink: 0, paddingBottom: 1 }}>
         {MODES.map(m => (
-          <Pill key={m.value} label={m.label} active={mode === m.value} onClick={() => handleMode(m.value)} />
+          <Pill key={m.value} label={m.label} active={mode === m.value} onClick={() => setMode(m.value)} />
         ))}
       </div>
 
       {/* Genre sub-pills */}
       {needsGenre && (
         <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0, paddingBottom: 1 }}>
-          {genreList.length === 0 ? (
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Loading genres…</span>
-          ) : genreList.map(g => (
+          {genreList.map(g => (
             <button key={g.id} onClick={() => handleGenre(g.id)} style={subPillStyle(genreId === g.id)}>
               {g.name}
             </button>
@@ -412,9 +413,7 @@ function DiscoverTab({
       {/* Network sub-pills */}
       {needsNetwork && (
         <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexShrink: 0, paddingBottom: 1 }}>
-          {networks.length === 0 ? (
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Loading networks…</span>
-          ) : networks.map(n => (
+          {networks.map(n => (
             <button key={n.id} onClick={() => handleNetwork(n.id)} style={subPillStyle(networkId === n.id)}>
               {n.name}
             </button>
@@ -422,17 +421,40 @@ function DiscoverTab({
         </div>
       )}
 
-      {/* Poster grid — fills remaining space */}
+      {/* Poster grid + load more */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {showGrid ? (
-          <PosterGrid
-            items={results}
-            requestingId={requestingId}
-            onRequest={onRequest}
-            loading={discoverLoading}
-          />
+          <>
+            <PosterGrid
+              items={results}
+              requestingId={requestingId}
+              onRequest={onRequest}
+              loading={discoverLoading && discoverPage === 1}
+            />
+            {/* Load more */}
+            {(hasMore || (discoverLoading && discoverPage > 1)) && (
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4 }}>
+                <button
+                  onClick={handleLoadMore}
+                  disabled={discoverLoading}
+                  style={{
+                    padding: '6px 22px', borderRadius: 20,
+                    border: `1px solid ${ACCENT}55`,
+                    background: 'rgba(229,160,13,0.08)',
+                    color: ACCENT, fontSize: '0.72rem', fontWeight: 600,
+                    cursor: discoverLoading ? 'wait' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {discoverLoading ? 'Loading…' : `Load more  ·  pg ${discoverPage} / ${discoverTotalPages}`}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingTop: 4 }}>{emptyHint}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', paddingTop: 4 }}>
+            {needsGenre ? 'Pick a genre above' : 'Pick a network above'}
+          </div>
         )}
       </div>
     </div>
@@ -446,7 +468,7 @@ type Tab = 'discover' | 'requests'
 export default function OverseerrTile() {
   const { isConfigured } = useConfigStore()
   const {
-    results, requests, discoverResults,
+    results, requests, discoverResults, discoverPage, discoverTotalPages,
     movieGenres, tvGenres, networks,
     searching, discoverLoading, requestingId, error,
     search, clearResults, discover, requestMedia,
@@ -560,6 +582,8 @@ export default function OverseerrTile() {
                 <DiscoverTab
                   results={discoverResults}
                   discoverLoading={discoverLoading}
+                  discoverPage={discoverPage}
+                  discoverTotalPages={discoverTotalPages}
                   movieGenres={movieGenres}
                   tvGenres={tvGenres}
                   networks={networks}

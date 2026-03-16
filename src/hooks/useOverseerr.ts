@@ -57,6 +57,45 @@ export const MEDIA_STATUS: Record<number, { label: string; color: string }> = {
   5: { label: 'Available',  color: '#00e5a0' },
 }
 
+// ── Hardcoded fallback genre/network lists (TMDb IDs) ─────────────────────────
+// Used as initial state so genres are available immediately on first render.
+// fetchMetadata() may update these with live data from Overseerr.
+
+export const FALLBACK_MOVIE_GENRES: OverseerrGenre[] = [
+  { id: 28, name: 'Action' }, { id: 12, name: 'Adventure' },
+  { id: 16, name: 'Animation' }, { id: 35, name: 'Comedy' },
+  { id: 80, name: 'Crime' }, { id: 99, name: 'Documentary' },
+  { id: 18, name: 'Drama' }, { id: 10751, name: 'Family' },
+  { id: 14, name: 'Fantasy' }, { id: 36, name: 'History' },
+  { id: 27, name: 'Horror' }, { id: 9648, name: 'Mystery' },
+  { id: 10749, name: 'Romance' }, { id: 878, name: 'Sci-Fi' },
+  { id: 53, name: 'Thriller' }, { id: 10752, name: 'War' },
+  { id: 37, name: 'Western' },
+]
+
+export const FALLBACK_TV_GENRES: OverseerrGenre[] = [
+  { id: 10759, name: 'Action & Adventure' }, { id: 16, name: 'Animation' },
+  { id: 35, name: 'Comedy' }, { id: 80, name: 'Crime' },
+  { id: 99, name: 'Documentary' }, { id: 18, name: 'Drama' },
+  { id: 10751, name: 'Family' }, { id: 10762, name: 'Kids' },
+  { id: 9648, name: 'Mystery' }, { id: 10764, name: 'Reality' },
+  { id: 10765, name: 'Sci-Fi & Fantasy' }, { id: 10768, name: 'War & Politics' },
+  { id: 37, name: 'Western' },
+]
+
+export const FALLBACK_NETWORKS: OverseerrNetwork[] = [
+  { id: 213, name: 'Netflix' }, { id: 1024, name: 'Prime Video' },
+  { id: 2739, name: 'Disney+' }, { id: 49, name: 'HBO' },
+  { id: 359, name: 'Hulu' }, { id: 2087, name: 'Apple TV+' },
+  { id: 174, name: 'AMC' }, { id: 453, name: 'FX' },
+  { id: 19, name: 'Fox' }, { id: 6, name: 'NBC' },
+  { id: 2, name: 'ABC' }, { id: 4, name: 'CBS' },
+  { id: 77, name: 'Showtime' }, { id: 318, name: 'Starz' },
+  { id: 56, name: 'TNT' }, { id: 34, name: 'Syfy' },
+  { id: 71, name: 'CW' }, { id: 16, name: 'Comedy Central' },
+  { id: 23, name: 'Cartoon Network' }, { id: 251, name: 'USA Network' },
+]
+
 // ── Config helpers ────────────────────────────────────────────────────────────
 
 function getOverseerrConfig() {
@@ -84,6 +123,8 @@ interface UseOverseerrReturn {
   results: OverseerrResult[]
   requests: OverseerrRequest[]
   discoverResults: OverseerrResult[]
+  discoverPage: number
+  discoverTotalPages: number
   movieGenres: OverseerrGenre[]
   tvGenres: OverseerrGenre[]
   networks: OverseerrNetwork[]
@@ -93,7 +134,7 @@ interface UseOverseerrReturn {
   error: string | null
   search: (query: string) => void
   clearResults: () => void
-  discover: (mode: DiscoverMode, id?: number) => void
+  discover: (mode: DiscoverMode, id?: number, page?: number) => void
   fetchMetadata: () => Promise<void>
   requestMedia: (mediaId: number, mediaType: 'movie' | 'tv') => Promise<void>
 }
@@ -109,9 +150,12 @@ export function useOverseerr(): UseOverseerrReturn {
   const [results, setResults]               = useState<OverseerrResult[]>([])
   const [requests, setRequests]             = useState<OverseerrRequest[]>([])
   const [discoverResults, setDiscoverResults] = useState<OverseerrResult[]>([])
-  const [movieGenres, setMovieGenres]       = useState<OverseerrGenre[]>([])
-  const [tvGenres, setTvGenres]             = useState<OverseerrGenre[]>([])
-  const [networks, setNetworks]             = useState<OverseerrNetwork[]>([])
+  const [discoverPage, setDiscoverPage]     = useState(1)
+  const [discoverTotalPages, setDiscoverTotalPages] = useState(1)
+  // Pre-populate with fallbacks so genres/networks are available immediately
+  const [movieGenres, setMovieGenres]       = useState<OverseerrGenre[]>(FALLBACK_MOVIE_GENRES)
+  const [tvGenres, setTvGenres]             = useState<OverseerrGenre[]>(FALLBACK_TV_GENRES)
+  const [networks, setNetworks]             = useState<OverseerrNetwork[]>(FALLBACK_NETWORKS)
   const [searching, setSearching]           = useState(false)
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [requestingId, setRequestingId]     = useState<number | null>(null)
@@ -191,12 +235,16 @@ export function useOverseerr(): UseOverseerrReturn {
 
   const clearResults = useCallback(() => setResults([]), [])
 
-  // ── Discover ───────────────────────────────────────────────────────────────
+  // ── Discover (with pagination) ──────────────────────────────────────────────
 
-  const discover = useCallback((mode: DiscoverMode, id?: number) => {
+  const discover = useCallback((mode: DiscoverMode, id?: number, page = 1) => {
     if (!isOverseerrConfigured()) return
-    if (discoverCtrl.current) discoverCtrl.current.abort()
-    discoverCtrl.current = new AbortController()
+
+    // Only abort/reset on new mode/id requests (page 1)
+    if (page === 1) {
+      if (discoverCtrl.current) discoverCtrl.current.abort()
+      discoverCtrl.current = new AbortController()
+    }
 
     const endpoints: Record<DiscoverMode, string> = {
       trending:    '/api/v1/discover/trending',
@@ -210,10 +258,17 @@ export function useOverseerr(): UseOverseerrReturn {
     if (!url || (mode.includes('genre') && !id) || (mode === 'tv_network' && !id)) return
 
     setDiscoverLoading(true)
-    proxyFetch(overseerrUrl(url + '?page=1&language=en'), overseerrHeaders())
+    proxyFetch(overseerrUrl(`${url}?page=${page}&language=en`), overseerrHeaders())
       .then(r => r.json())
       .then(data => {
-        setDiscoverResults((data.results ?? []).slice(0, 20))
+        const incoming: OverseerrResult[] = data.results ?? []
+        if (page === 1) {
+          setDiscoverResults(incoming)
+        } else {
+          setDiscoverResults(prev => [...prev, ...incoming])
+        }
+        setDiscoverPage(page)
+        setDiscoverTotalPages(data.totalPages ?? 1)
       })
       .catch(() => { /* aborted or failed */ })
       .finally(() => setDiscoverLoading(false))
@@ -221,22 +276,9 @@ export function useOverseerr(): UseOverseerrReturn {
 
   // ── Metadata (genres + networks) ───────────────────────────────────────────
 
-  // Popular TV networks (TMDb IDs) — shown if the API endpoint returns nothing
-  const FALLBACK_NETWORKS: OverseerrNetwork[] = [
-    { id: 213, name: 'Netflix' }, { id: 1024, name: 'Prime Video' },
-    { id: 2739, name: 'Disney+' }, { id: 49, name: 'HBO' },
-    { id: 359, name: 'Hulu' }, { id: 2087, name: 'Apple TV+' },
-    { id: 174, name: 'AMC' }, { id: 453, name: 'FX' },
-    { id: 19, name: 'Fox' }, { id: 6, name: 'NBC' },
-    { id: 2, name: 'ABC' }, { id: 4, name: 'CBS' },
-    { id: 77, name: 'Showtime' }, { id: 318, name: 'Starz' },
-    { id: 56, name: 'TNT' }, { id: 34, name: 'Syfy' },
-    { id: 71, name: 'CW' }, { id: 16, name: 'Comedy Central' },
-    { id: 23, name: 'Cartoon Network' }, { id: 251, name: 'USA Network' },
-  ]
-
   const fetchMetadata = useCallback(async () => {
     if (!isOverseerrConfigured()) return
+    // Try to get live genres from Overseerr (falls back to hardcoded if it fails)
     try {
       const [mgRes, tgRes] = await Promise.all([
         proxyFetch(overseerrUrl('/api/v1/genre/movie'), overseerrHeaders()),
@@ -247,17 +289,15 @@ export function useOverseerr(): UseOverseerrReturn {
       const mgArr = toArr(mg); const tgArr = toArr(tg)
       if (mgArr.length) setMovieGenres(mgArr)
       if (tgArr.length) setTvGenres(tgArr)
-    } catch { /* non-critical */ }
+    } catch { /* keep fallback */ }
 
-    // Networks: try API, fall back to curated list
+    // Networks: try API, keep fallback if empty
     try {
       const nwRes = await proxyFetch(overseerrUrl('/api/v1/network'), overseerrHeaders())
       const nw = await nwRes.json()
       const arr = Array.isArray(nw) ? nw : (nw?.results ?? [])
-      setNetworks(arr.length ? arr.slice(0, 40) : FALLBACK_NETWORKS)
-    } catch {
-      setNetworks(FALLBACK_NETWORKS)
-    }
+      if (arr.length) setNetworks(arr.slice(0, 40))
+    } catch { /* keep fallback */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   fetchMetadataRef.current = fetchMetadata
@@ -270,7 +310,6 @@ export function useOverseerr(): UseOverseerrReturn {
     try {
       await proxyPost(overseerrUrl('/api/v1/request'), { mediaId, mediaType }, overseerrHeaders())
       await fetchRequests()
-      // Update status in all result lists
       const setAvailable = (prev: OverseerrResult[]) =>
         prev.map(r => r.id === mediaId ? { ...r, mediaInfo: { status: 2 } } : r)
       setResults(setAvailable)
@@ -283,7 +322,7 @@ export function useOverseerr(): UseOverseerrReturn {
   }, [fetchRequests])
 
   return {
-    results, requests, discoverResults,
+    results, requests, discoverResults, discoverPage, discoverTotalPages,
     movieGenres, tvGenres, networks,
     searching, discoverLoading, requestingId, error,
     search, clearResults, discover, fetchMetadata, requestMedia,
