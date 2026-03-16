@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import useConfigStore from '@/store/useConfigStore'
 import { proxyFetch, proxyPost } from '@/lib/proxyFetch'
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 export interface OverseerrResult {
   id: number
   mediaType: 'movie' | 'tv'
@@ -10,19 +12,36 @@ export interface OverseerrResult {
   releaseDate?: string
   firstAirDate?: string
   posterPath?: string
-  mediaInfo?: {
-    status: number // 2=pending 3=processing 4=partial 5=available
-  }
+  overview?: string
+  voteAverage?: number
+  mediaInfo?: { status: number }
 }
 
 export interface OverseerrRequest {
   id: number
-  status: number // 1=pending 2=approved 3=declined 4=partially approved
+  status: number
   type: string
-  media: { mediaType: string; tmdbId?: number; title?: string; mediaStatus?: number }
+  media: {
+    mediaType: string
+    tmdbId?: number
+    title?: string
+    mediaStatus?: number
+    posterPath?: string
+  }
   requestedBy: { displayName: string }
   createdAt: string
 }
+
+export interface OverseerrGenre { id: number; name: string }
+export interface OverseerrNetwork { id: number; name: string }
+
+export type DiscoverMode =
+  | 'trending'
+  | 'movies'
+  | 'tv'
+  | 'movie_genre'
+  | 'tv_genre'
+  | 'tv_network'
 
 export const REQUEST_STATUS: Record<number, { label: string; color: string }> = {
   1: { label: 'Pending',  color: '#f39c12' },
@@ -38,7 +57,8 @@ export const MEDIA_STATUS: Record<number, { label: string; color: string }> = {
   5: { label: 'Available',  color: '#00e5a0' },
 }
 
-// Read config directly from store state to avoid stale closure issues
+// ── Config helpers ────────────────────────────────────────────────────────────
+
 function getOverseerrConfig() {
   const { url, apiKey } = useConfigStore.getState().services.overseerr as { url: string; apiKey: string }
   return { url: url?.trim().replace(/\/$/, ''), apiKey: apiKey?.trim() }
@@ -50,8 +70,7 @@ function isOverseerrConfigured() {
 }
 
 function overseerrUrl(path: string) {
-  const { url } = getOverseerrConfig()
-  return `${url}${path}`
+  return `${getOverseerrConfig().url}${path}`
 }
 
 function overseerrHeaders(): Record<string, string> {
@@ -59,14 +78,23 @@ function overseerrHeaders(): Record<string, string> {
   return apiKey ? { 'X-Api-Key': apiKey } : {}
 }
 
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
 interface UseOverseerrReturn {
   results: OverseerrResult[]
   requests: OverseerrRequest[]
+  discoverResults: OverseerrResult[]
+  movieGenres: OverseerrGenre[]
+  tvGenres: OverseerrGenre[]
+  networks: OverseerrNetwork[]
   searching: boolean
+  discoverLoading: boolean
   requestingId: number | null
   error: string | null
   search: (query: string) => void
   clearResults: () => void
+  discover: (mode: DiscoverMode, id?: number) => void
+  fetchMetadata: () => Promise<void>
   requestMedia: (mediaId: number, mediaType: 'movie' | 'tv') => Promise<void>
 }
 
@@ -78,17 +106,26 @@ export function useOverseerr(): UseOverseerrReturn {
     return !!(url?.trim() && apiKey?.trim())
   })
 
-  const [results, setResults] = useState<OverseerrResult[]>([])
-  const [requests, setRequests] = useState<OverseerrRequest[]>([])
-  const [searching, setSearching] = useState(false)
-  const [requestingId, setRequestingId] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [results, setResults]               = useState<OverseerrResult[]>([])
+  const [requests, setRequests]             = useState<OverseerrRequest[]>([])
+  const [discoverResults, setDiscoverResults] = useState<OverseerrResult[]>([])
+  const [movieGenres, setMovieGenres]       = useState<OverseerrGenre[]>([])
+  const [tvGenres, setTvGenres]             = useState<OverseerrGenre[]>([])
+  const [networks, setNetworks]             = useState<OverseerrNetwork[]>([])
+  const [searching, setSearching]           = useState(false)
+  const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [requestingId, setRequestingId]     = useState<number | null>(null)
+  const [error, setError]                   = useState<string | null>(null)
+
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const discoverCtrl = useRef<AbortController | null>(null)
+
+  // ── Requests ───────────────────────────────────────────────────────────────
 
   const fetchRequests = useCallback(async () => {
     if (!isOverseerrConfigured()) return
     try {
-      const res = await proxyFetch(overseerrUrl('/api/v1/request?take=10&skip=0&sort=added&filter=all'), overseerrHeaders())
+      const res = await proxyFetch(overseerrUrl('/api/v1/request?take=20&skip=0&sort=added&filter=all'), overseerrHeaders())
       const text = await res.text()
       let data: any
       try { data = JSON.parse(text) } catch {
@@ -109,11 +146,10 @@ export function useOverseerr(): UseOverseerrReturn {
               ...req.media,
               title: d.title ?? d.name ?? d.originalTitle ?? d.originalName ?? req.media.title,
               mediaStatus: d.mediaInfo?.status,
+              posterPath: d.posterPath,
             },
           }
-        } catch {
-          return req
-        }
+        } catch { return req }
       }))
       setRequests(enriched)
       setError(null)
@@ -129,6 +165,8 @@ export function useOverseerr(): UseOverseerrReturn {
     return () => clearInterval(t)
   }, [configured, fetchRequests])
 
+  // ── Search ─────────────────────────────────────────────────────────────────
+
   const search = useCallback((query: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     if (!query.trim()) { setResults([]); return }
@@ -136,13 +174,9 @@ export function useOverseerr(): UseOverseerrReturn {
       if (!isOverseerrConfigured()) return
       setSearching(true)
       try {
-        const res = await proxyFetch(overseerrUrl(`/api/v1/search?query=${encodeURIComponent(query)}&page=1&language=en`), overseerrHeaders())
-        const text = await res.text()
-        let data: any
-        try { data = JSON.parse(text) } catch {
-          throw new Error(`Not valid JSON — got: ${text.slice(0, 80)}`)
-        }
-        setResults((data.results ?? []).slice(0, 8))
+        const res = await proxyFetch(overseerrUrl(`/api/v1/search?query=${encodeURIComponent(query)}&page=1`), overseerrHeaders())
+        const data = await res.json()
+        setResults((data.results ?? []).slice(0, 12))
         setError(null)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Search failed')
@@ -154,15 +188,64 @@ export function useOverseerr(): UseOverseerrReturn {
 
   const clearResults = useCallback(() => setResults([]), [])
 
+  // ── Discover ───────────────────────────────────────────────────────────────
+
+  const discover = useCallback((mode: DiscoverMode, id?: number) => {
+    if (!isOverseerrConfigured()) return
+    if (discoverCtrl.current) discoverCtrl.current.abort()
+    discoverCtrl.current = new AbortController()
+
+    const endpoints: Record<DiscoverMode, string> = {
+      trending:    '/api/v1/discover/trending',
+      movies:      '/api/v1/discover/movies',
+      tv:          '/api/v1/discover/tv',
+      movie_genre: `/api/v1/discover/movies/genre/${id ?? 0}`,
+      tv_genre:    `/api/v1/discover/tv/genre/${id ?? 0}`,
+      tv_network:  `/api/v1/discover/tv/network/${id ?? 0}`,
+    }
+    const url = endpoints[mode]
+    if (!url || (mode.includes('genre') && !id) || (mode === 'tv_network' && !id)) return
+
+    setDiscoverLoading(true)
+    proxyFetch(overseerrUrl(url + '?page=1&language=en'), overseerrHeaders())
+      .then(r => r.json())
+      .then(data => {
+        setDiscoverResults((data.results ?? []).slice(0, 20))
+      })
+      .catch(() => { /* aborted or failed */ })
+      .finally(() => setDiscoverLoading(false))
+  }, [])
+
+  // ── Metadata (genres + networks) ───────────────────────────────────────────
+
+  const fetchMetadata = useCallback(async () => {
+    if (!isOverseerrConfigured()) return
+    try {
+      const [mgRes, tgRes, nwRes] = await Promise.all([
+        proxyFetch(overseerrUrl('/api/v1/genre/movie'), overseerrHeaders()),
+        proxyFetch(overseerrUrl('/api/v1/genre/tv'), overseerrHeaders()),
+        proxyFetch(overseerrUrl('/api/v1/network'), overseerrHeaders()),
+      ])
+      const [mg, tg, nw] = await Promise.all([mgRes.json(), tgRes.json(), nwRes.json()])
+      if (Array.isArray(mg)) setMovieGenres(mg)
+      if (Array.isArray(tg)) setTvGenres(tg)
+      if (Array.isArray(nw)) setNetworks(nw.slice(0, 60))
+    } catch { /* non-critical */ }
+  }, [])
+
+  // ── Request media ──────────────────────────────────────────────────────────
+
   const requestMedia = useCallback(async (mediaId: number, mediaType: 'movie' | 'tv') => {
     if (!isOverseerrConfigured()) return
     setRequestingId(mediaId)
     try {
       await proxyPost(overseerrUrl('/api/v1/request'), { mediaId, mediaType }, overseerrHeaders())
       await fetchRequests()
-      setResults((prev) => prev.map((r) =>
-        r.id === mediaId ? { ...r, mediaInfo: { status: 2 } } : r
-      ))
+      // Update status in all result lists
+      const setAvailable = (prev: OverseerrResult[]) =>
+        prev.map(r => r.id === mediaId ? { ...r, mediaInfo: { status: 2 } } : r)
+      setResults(setAvailable)
+      setDiscoverResults(setAvailable)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed')
     } finally {
@@ -170,5 +253,10 @@ export function useOverseerr(): UseOverseerrReturn {
     }
   }, [fetchRequests])
 
-  return { results, requests, searching, requestingId, error, search, clearResults, requestMedia }
+  return {
+    results, requests, discoverResults,
+    movieGenres, tvGenres, networks,
+    searching, discoverLoading, requestingId, error,
+    search, clearResults, discover, fetchMetadata, requestMedia,
+  }
 }
